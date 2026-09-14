@@ -445,23 +445,41 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::string dataPath = Ship::Context::GetAppDirectoryPath(appShortName);
     std::string file;
 
+// UPSTREAM BUG: these console popups were registered UNCONDITIONALLY. shouldRegen is
+// computed above and then ignored here (the `else if (shouldRegen)` below is the desktop
+// path), so every Wii U and Switch launch showed "Outdated ROM Archives" no matter what
+// the archives actually contained - the game could never start. Guard them.
 #if defined(__SWITCH__)
-    SohGui::RegisterPopup("Outdated ROM Archives",
-                          "\x1b[2;2HYou've launched the Ship with an old ROM O2R file."
-                          "\x1b[4;2HPlease regenerate a new ROM O2R and relaunch."
-                          "\x1b[6;2HPress the Home button to exit...",
-                          "OK", "", [&]() { exit(1); });
+    if (shouldRegen) {
+        SohGui::RegisterPopup("Outdated ROM Archives",
+                              "\x1b[2;2HYou've launched the Ship with an old ROM O2R file."
+                              "\x1b[4;2HPlease regenerate a new ROM O2R and relaunch."
+                              "\x1b[6;2HPress the Home button to exit...",
+                              "OK", "", [&]() { exit(1); });
+    }
 #elif defined(__WIIU__)
-    SohGui::RegisterPopup("Outdated ROM Archives",
-                          "You've launched the Ship with an old a ROM O2R file.\n\n"
-                          "Please generate a ROM O2R and relaunch.\n\n"
-                          "Press and hold the Power button to shutdown...",
-                          "OK", "", [&]() { exit(1); });
+    if (shouldRegen) {
+        SohGui::RegisterPopup("Outdated ROM Archives",
+                              "You've launched the Ship with an old a ROM O2R file.\n\n"
+                              "Please generate a ROM O2R and relaunch.\n\n"
+                              "Press and hold the Power button to shutdown...",
+                              "OK", "", [&]() { exit(1); });
+    }
     // Upstream called OSFatal() with no argument (it takes a message, so this never
     // compiled). Dropped rather than fixed: it would red-screen the console before the
     // popup registered on the line above could draw, and the popup's OK already exits.
 #endif
 
+    // Desktop-only. Both halves are wrong for a console:
+    //   * `assets/` is the PC extractor's folder, used to GENERATE an OTR from a ROM.
+    //     Consoles never generate - the .o2r is built on a PC and copied across - and
+    //     GetAppBundlePath() has no such folder, so this popup fired on every launch and
+    //     blocked startup entirely.
+    //   * the regen branch removes "oot.o2r"/"oot-mq.o2r" by RELATIVE path, and
+    //     WiiU::Init has already chdir'd into wiiu/apps/<shortName> - it would delete the
+    //     user's archive off the SD card.
+    // The console's own outdated-archive popup is handled above.
+#if not defined(__SWITCH__) && not defined(__WIIU__)
     if (!std::filesystem::exists(installPath + "/assets")) {
         SohGui::RegisterPopup("Extractor assets not found",
                               "No O2R files found. Missing 'assets/' folder needed to generate OTR file.\nPlease "
@@ -474,6 +492,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         std::filesystem::remove("oot.o2r");
         std::filesystem::remove("oot-mq.o2r");
     }
+#endif
 
     std::shared_ptr<BS::thread_pool> threadPool = std::make_shared<BS::thread_pool>(1);
     std::optional<std::future<void>> extractionTask;
