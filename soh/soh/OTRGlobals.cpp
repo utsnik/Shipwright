@@ -59,7 +59,16 @@
 #ifdef __SWITCH__
 #include <port/switch/SwitchImpl.h>
 #elif defined(__WIIU__)
-#include <port/wiiu/WiiUImpl.h>
+// Do NOT include <port/wiiu/WiiUImpl.h> here: it pulls padscore/kpad.h ->
+// coreinit/time.h, whose `typedef int64_t OSTime` conflicts with libultra's
+// `typedef u64 OSTime`, already visible in this translation unit. gfx_wiiu.cpp
+// hit the same wall; declare the two helpers actually used instead.
+namespace Ship {
+namespace WiiU {
+void Init(const std::string& shortName);
+void ThrowInvalidOTR();
+} // namespace WiiU
+} // namespace Ship
 #include <coreinit/debug.h> // OSFatal
 #endif
 
@@ -406,7 +415,9 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
             args.push_back(argv[i]);
         }
     }
+#if not defined(__SWITCH__) && not defined(__WIIU__)
     Extractor extract;
+#endif
     PromptSteps promptStep = PS_FILE_CHECK;
     bool generatedIsMQ = false;
     std::atomic<size_t> extractCount = 0, totalExtract = 0;
@@ -427,7 +438,9 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                           "Please generate a ROM O2R and relaunch.\n\n"
                           "Press and hold the Power button to shutdown...",
                           "OK", "", [&]() { exit(1); });
-    OSFatal();
+    // Upstream called OSFatal() with no argument (it takes a message, so this never
+    // compiled). Dropped rather than fixed: it would red-screen the console before the
+    // popup registered on the line above could draw, and the popup's OK already exits.
 #endif
 
     if (!std::filesystem::exists(installPath + "/assets")) {
@@ -624,6 +637,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                         }
                         continue;
                     }
+#if not defined(__SWITCH__) && not defined(__WIIU__)
                     case PS_LOCAL: {
                         extract = Extractor();
                         extract.SetSearchPath(installPath);
@@ -676,6 +690,16 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                             [&]() { extractStep = ES_VERIFY; });
                         continue;
                     }
+#else
+                    // Extractor is not built for the consoles: there is no on-device ROM
+                    // extraction, the .o2r is generated on a PC and copied across. Fall
+                    // through to ES_VERIFY, which reports a missing archive and exits.
+                    case PS_LOCAL:
+                    case PS_FIRST:
+                    case PS_SECOND:
+                        extractStep = ES_VERIFY;
+                        continue;
+#endif
                     default:
                         break;
                 }
@@ -1445,7 +1469,17 @@ OTRVersion DetectOTRVersion(std::string fileName, bool isMQ) {
 }
 
 extern "C" void Messagebox_ShowErrorBox(char* title, char* body) {
+#if defined(__SWITCH__) || defined(__WIIU__)
+    // Extractor, and with it its message-box helper, is not built for the consoles.
+    SPDLOG_ERROR("{}: {}", title, body);
+#ifdef __WIIU__
+    // OSFatal is the console's error box: it puts the text on screen and stops. Every
+    // caller of this treats it as fatal, so not returning matches the intent.
+    OSFatal(body);
+#endif
+#else
     Extractor::ShowErrorBox(title, body);
+#endif
 }
 
 bool VerifyArchiveVersion(OTRVersion version) {

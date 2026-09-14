@@ -6,9 +6,10 @@
 #include "soh/SohGui/SohGui.hpp"
 #include "z64.h"
 #include "soh/cvar_prefixes.h"
-#ifndef __WIIU__
+// The #ifndef __WIIU__ guard here is an upstream leftover from the pre-8.x Wii U
+// port: line ~325 uses Ship::SDLAxisDirectionToButtonMapping unconditionally, and
+// LUS builds the SDL mapping classes on CafeOS, so the guard only broke the build.
 #include <ship/controller/controldevice/controller/mapping/sdl/SDLAxisDirectionToButtonMapping.h>
-#endif
 
 #define SCALE_IMGUI_SIZE(value) ((value / 13.0f) * ImGui::GetFontSize())
 

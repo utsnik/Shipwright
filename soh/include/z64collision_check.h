@@ -1,6 +1,12 @@
 #ifndef Z_COLLISION_CHECK_H
 #define Z_COLLISION_CHECK_H
 
+// Same BSD hack as global.h, but it has to happen HERE: newlib's <sys/types.h>
+// does `#define quad quad_t` under __BSD_VISIBLE, and any TU that reaches
+// ColliderQuadDim via z64.h without global.h (colViewer.cpp) otherwise declares
+// the member as `quad_t` and then fails on every `.quad` access.
+#undef quad
+
 #define COLLISION_CHECK_AT_MAX 50
 #define COLLISION_CHECK_AC_MAX 60
 #define COLLISION_CHECK_OC_MAX 50
