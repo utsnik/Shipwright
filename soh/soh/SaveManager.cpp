@@ -513,7 +513,7 @@ void SaveManager::StartupCheckAndInitMeta(int fileNum) {
                 Ship::Context::GetPathRelativeToAppDirectory("Save") +
                 ("/file" + std::to_string(fileNum + 1) + "-" + std::to_string(GetUnixTimestamp()) + ".bak");
 #if defined(__SWITCH__) || defined(__WIIU__)
-            copy_file(fileName.c_str(), newFileName.c_str());
+            std::filesystem::copy_file(fileName.c_str(), newFileName.c_str());
             std::filesystem::remove(fileName);
 #else
             std::filesystem::rename(fileName, newFileName);

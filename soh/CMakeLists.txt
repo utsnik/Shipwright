@@ -684,11 +684,24 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
     set(ADDITIONAL_LIBRARY_DEPENDENCIES
         "libultraship;"
         SDL2::SDL2-static
+        # mixer.c decodes the OPUS-compressed sequences unconditionally, so these are
+        # required, not optional. devkitPro ships them as ppc portlibs; link them by
+        # path rather than find_package, which has no config files for them here.
+        # AudioSampleFactory.cpp's Ogg decoder needs vorbisfile the same way.
+        # Order matters for static archives: opusfile -> opus -> vorbisfile -> vorbis -> ogg.
+        ${DEVKITPRO}/portlibs/ppc/lib/libopusfile.a
+        ${DEVKITPRO}/portlibs/ppc/lib/libopus.a
+        ${DEVKITPRO}/portlibs/ppc/lib/libvorbisfile.a
+        ${DEVKITPRO}/portlibs/ppc/lib/libvorbis.a
+        ${DEVKITPRO}/portlibs/ppc/lib/libogg.a
 
         "$<$<CONFIG:Debug>:-Wl,--wrap=abort>"
     )
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
+        # opusfile.h sits in the opus/ subdirectory here; on desktop the include path
+        # comes from opusfile's pkg-config, which devkitPro's portlib does not provide.
+        ${DEVKITPRO}/portlibs/ppc/include/opus
     )
 else()
     find_package(SDL2)
