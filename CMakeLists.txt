@@ -7,6 +7,18 @@ set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X deployment version")
 
 project(Ship VERSION 9.2.3 LANGUAGES C CXX)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
+    # devkitPPC's toolchain never declares the WHOLE_ARCHIVE link feature, so
+    # every $<LINK_LIBRARY:WHOLE_ARCHIVE,...> in this tree fails at generate
+    # time. GNU ld supports the underlying flags; just declare them.
+    foreach(lang C CXX)
+        set(CMAKE_${lang}_LINK_LIBRARY_USING_WHOLE_ARCHIVE
+            "-Wl,--whole-archive" "<LINK_ITEM>" "-Wl,--no-whole-archive")
+        set(CMAKE_${lang}_LINK_LIBRARY_USING_WHOLE_ARCHIVE_SUPPORTED TRUE)
+    endforeach()
+endif()
+
 include(CMake/soh-cvars.cmake)
 include(CMake/lus-cvars.cmake)
 set(SPDLOG_LEVEL_TRACE 0)
