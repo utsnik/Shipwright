@@ -396,6 +396,25 @@ namespace SohGui {
 extern std::shared_ptr<SohGui::SohMenu> mSohMenu;
 }
 
+
+// RunExtract draws its prompts BEFORE OTRGlobals::Initialize() calls
+// context->InitConsoleVariables(), so the theme CVar it reads is not backed by an
+// initialised store yet, and UIWidgets::ColorValues is a header-scope global with a
+// dynamic initialiser. Either can make ColorValues.at(key) throw std::out_of_range -
+// which is exactly what killed startup here (CXX: throw type=St12out_of_range).
+// Look the colour up defensively; never let the extract UI abort the whole program.
+static ImVec4 SafeThemeColor(UIWidgets::Colors key) {
+    auto it = UIWidgets::ColorValues.find(key);
+    if (it != UIWidgets::ColorValues.end()) {
+        return it->second;
+    }
+    it = UIWidgets::ColorValues.find(UIWidgets::Colors::LightBlue);
+    if (it != UIWidgets::ColorValues.end()) {
+        return it->second;
+    }
+    return ImVec4(0.0f, 0.24f, 0.8f, 1.0f); // LightBlue's literal value
+}
+
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
@@ -730,8 +749,8 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         wnd->HandleEvents();
         UIWidgets::Colors themeColor =
             static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
-        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
-        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, UIWidgets::ColorValues.at(UIWidgets::Colors::DarkGray));
+        ImGui::PushStyleColor(ImGuiCol_TitleBgActive, SafeThemeColor(themeColor));
+        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, SafeThemeColor(UIWidgets::Colors::DarkGray));
 
         // Skip dropped frames
         if (!wnd->IsFrameReady()) {
@@ -755,7 +774,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                 }
                 ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
                 ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
-                auto color = UIWidgets::ColorValues.at(THEME_COLOR);
+                auto color = SafeThemeColor(THEME_COLOR);
                 ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(color.x, color.y, color.z, 0.6f));
                 ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(color.x, color.y, color.z, 1.0f));
                 ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.3f));
@@ -1760,7 +1779,7 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
 
     UIWidgets::Colors themeColor =
         static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, UIWidgets::ColorValues.at(themeColor));
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, SafeThemeColor(themeColor));
     for (const auto& m : mtx_replacements) {
         wnd->DrawAndRunGraphicsCommands(Commands, m);
         intp->mInterpolationIndex++;
