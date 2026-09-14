@@ -275,6 +275,11 @@ static const std::map<Ship::WindowBackend, const char*> windowBackendsMap = {
     { Ship::WindowBackend::FAST3D_DXGI_DX11, "DirectX" },
     { Ship::WindowBackend::FAST3D_SDL_OPENGL, "OpenGL" },
     { Ship::WindowBackend::FAST3D_SDL_METAL, "Metal" },
+    // Must exist for every backend AddAvailableWindowBackend() registers:
+    // Menu::UpdateWindowBackendObjects() does windowBackendsMap.at(backend) over the
+    // available list, so a missing entry throws std::out_of_range out of the
+    // OTRGlobals constructor, long before any of this is drawn.
+    { Ship::WindowBackend::FAST3D_WIIU_GX2, "GX2" },
 };
 
 struct MenuInit {
