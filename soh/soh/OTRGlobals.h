@@ -35,7 +35,11 @@ struct ExtensionEntry {
 extern std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
 #include "Enhancements/randomizer/settings.h"
 
-const std::string appShortName = "soh";
+// "soh923", not "soh": Ship::WiiU::Init chdirs to /vol/external01/wiiu/apps/<shortName>,
+// and wiiu/apps/soh belongs to the WORKING SoH 1.0.0 build (oot.otr + its save). 9.2.3's
+// oot.o2r/soh.o2r already live in wiiu/apps/soh923, so this both finds them without
+// copying 38 MB and keeps the known-good 1.0.0 reference build untouched.
+const std::string appShortName = "soh923";
 
 #ifdef __WIIU__
 const uint32_t defaultImGuiScale = 3;
