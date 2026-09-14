@@ -1487,6 +1487,16 @@ bool VerifyArchiveVersion(OTRVersion version) {
 }
 
 extern "C" void InitOTR(int argc, char* argv[]) {
+#ifdef __WIIU__
+    // MUST be first. WiiU::Init brings up UDP logging AND chdirs to the app directory;
+    // until it runs, cwd is the SD root, so every relative archive lookup resolves
+    // wrong and nothing can report why. Upstream only calls it at the tail of
+    // RunExtract, which is far too late: `new OTRGlobals()` below constructs the
+    // Context and opens the resource archives, and RunExtract itself does filesystem
+    // probes and draws GUI, all before that call is reached. See the homelab memory
+    // `lus-wiiu-init-must-precede-fs`. The later call is now a no-op.
+    Ship::WiiU::Init(appShortName);
+#endif
     OTRGlobals::Instance = new OTRGlobals();
     OTRGlobals::Instance->RunExtract(argc, argv);
 
