@@ -696,6 +696,11 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
         ${DEVKITPRO}/portlibs/ppc/lib/libogg.a
 
         "$<$<CONFIG:Debug>:-Wl,--wrap=abort>"
+        # WiiUImpl.cpp defines __wrap___cxa_throw, which logs the thrown type - but
+        # without this flag the linker never redirects to it, so every uncaught
+        # exception surfaces as a bare "CXX: terminate" with no cause. Not Debug-only:
+        # this build is Release and the diagnosis is needed precisely here.
+        -Wl,--wrap=__cxa_throw
     )
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
