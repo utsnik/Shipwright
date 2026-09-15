@@ -1,0 +1,65 @@
+## Parked 2026-09-15 07:20
+
+**Goal:** Fix the exit-path ISI that hard-hung the Wii U every time SoH 9.2.3 was exited.
+
+**Stopped at:** DONE and verified on device. User left and took the console off-network,
+so no further on-device testing is possible for now.
+
+**State:** SOLVED. Root cause: `gfx_wiiu_shutdown` calls `GX2Shutdown()` during
+`gfx_wiiu_teardown`, while `Gui::ShutDownImGui` (Gui.cpp:202) runs
+`ImGui_ImplGX2_Shutdown()` only AFTERWARDS — so `ImGui_ImplGX2_DestroyFontsTexture`
+reached `GX2RDestroySurfaceEx`, and `DestroyDeviceObjects` reached
+`WHBGfxFreeShaderGroup`, on a dead GX2 whose GX2R allocator hooks were already gone.
+Both dispatched through NULL. Fixed with `gfx_wiiu_gx2_is_down()` (gfx_wiiu.cpp:83,
+flag set at line 514 immediately before `GX2Shutdown()`), checked in both ImGui GX2
+teardown paths so they skip ONLY the GPU-side frees. Verified on device 07:12:38 —
+both skip lines emitted, `EXIT: exit(0)`, and ZERO `EXC: ISI`. Evidence:
+`wiiu/soh923-exit-test-20260915-0505.log` (line ~4922 onward) in the homelab repo.
+
+Also landed this session:
+- `-Wl,--wrap=exit` added to `soh/CMakeLists.txt`. It was documented as the hurdle-7
+  fix but had NEVER been in the build, so `__wrap_exit` was dead code. Now 9 call
+  sites bind to it, 0 to real `exit`.
+- `OSGetSymbolName` resolution on the ISI, emitted as a second `EXC-SYM:` line AFTER
+  the register line. This is what solved the case in one build.
+- devoptab hygiene: `Exit()`/`__wrap_exit()` install a fully-populated `dotab_devnull`
+  before `WHBLogUdpDeinit()`; `dotab_stdout` NULL slots filled.
+- `__wrap___cxa_throw` bias now derived from `__init` (pinned at 0x02000080 by
+  wut-crtfix.ld) instead of a constant that went stale every rebuild.
+
+**Ruled out:**
+- **The devoptab hypothesis recorded in commit cab0f12 was WRONG.** Do not retry it.
+  `lr=0x011822B0` was constant across builds because it is a fixed offset inside
+  `gx2.rpl` — a system RPL. newlib/libwhb are statically linked, so a NULL call from
+  stdio teardown would have landed in our `.text` (0x0C000000+) and MOVED between
+  builds. Also `devoptab_list` lives in our own `.data` (0x1065a3e4), so no system RPL
+  can call through it.
+- Restoring the ORIGINAL devoptab pointers is wrong: measured in the linked ELF,
+  `devoptab_list[STD_IN/OUT/ERR]` default to `&dotab_stdnull`, whose `open_r`/`close_r`/
+  `read_r`/`fstat_r` are ALL NULL — the same defective shape being replaced.
+- NULL-callback theory on ProcUI/GX2 is dead: teardown already uses
+  `ProcUIClearCallbacks()`, and `GX2SetEventCallback(..., nullptr, nullptr)` is the
+  documented clear form.
+
+**Constraints:** Nothing was committed — the user was asked twice about committing and
+never answered, so this park commit is the first. Nothing pushed.
+
+**Next action:** Nothing is broken. If resuming: `git log -1` in
+`/home/utking/console-src/shipwright-923` and its `libultraship` submodule to see the
+parked WIP, then decide whether to squash it into a real commit and whether the
+`soh923b.wuhb` on the console (33,480,172 bytes, the verified-good build) should be
+backed up to `Roms/wiiU/soh-port-assets/` as a known-good set.
+
+**Watch out:**
+- `curl` reports SUCCESS on an ftpiiu `STOR` that never landed. A `DELE`-then-`STOR`
+  upload DELETED `soh923b.wuhb` and silently failed this session. Always re-list to
+  confirm, and use plain `-T` with `--disable-epsv` (ftpiiu rejects EPSV).
+- A stale 33 MB `wiiload2.tmp` is still sitting in `wiiu/apps/` on the console holding
+  an OLD build. Not cleaned up.
+- The UDP listener (`python3 udplog.py`) is STILL RUNNING on port 4405 writing to
+  `homelab/wiiu/soh923-exit-test-20260915-0505.log`. Left running deliberately. The
+  console is off-network so it is idle.
+- The pre-session console build is backed up at
+  `homelab/wiiu/backup/soh923b-prev-20260915-0502.wuhb`.
+- `soh/icon.jpg` emits a harmless "incorrect size" build warning (pre-existing).
+

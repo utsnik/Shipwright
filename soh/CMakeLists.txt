@@ -701,6 +701,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "CafeOS")
         # exception surfaces as a bare "CXX: terminate" with no cause. Not Debug-only:
         # this build is Release and the diagnosis is needed precisely here.
         -Wl,--wrap=__cxa_throw
+        # exit() hangs on Cafe OS: it unwinds destructors with GX2/ProcUI still live.
+        # Every popup's OK handler calls it, so dismissing any prompt wedged the console.
+        -Wl,--wrap=exit
     )
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${DEVKITPRO}/portlibs/wiiu/include/
