@@ -788,7 +788,9 @@ wut_create_wuhb(${PROJECT_NAME}
     NAME       "Ship of Harkinian"
     SHORTNAME  "SoH"
     AUTHOR     "${PROJECT_TEAM}"
-    ICON       ${CMAKE_CURRENT_SOURCE_DIR}/icon.jpg
+    ICON       ${CMAKE_CURRENT_SOURCE_DIR}/wiiu/icon.png
+    TVSPLASH   ${CMAKE_CURRENT_SOURCE_DIR}/wiiu/splash-tv.png
+    DRCSPLASH  ${CMAKE_CURRENT_SOURCE_DIR}/wiiu/splash-drc.png
 )
 
 INSTALL(FILES ${CMAKE_CURRENT_BINARY_DIR}/soh.rpx ${CMAKE_CURRENT_BINARY_DIR}/soh.wuhb DESTINATION . COMPONENT ship)
