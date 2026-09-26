@@ -22,6 +22,23 @@ static void SetMessageEntry(MessageTableEntry& entry, const SOH::MessageEntry& m
     entry.msgSize = msgEntry.msg.size();
 }
 
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+static void OTRMessage_SwapJapaneseTableEndian(SOH::Text& file) {
+    const auto marker = std::find_if(file.messages.begin(), file.messages.end(),
+                                     [](const auto& message) { return message.id == 0xFFFC; });
+    if (marker == file.messages.end() || marker->msg.size() % 2 != 0 || marker->msg.size() < 2 ||
+        static_cast<unsigned char>(marker->msg[marker->msg.size() - 2]) != 0x70 ||
+        static_cast<unsigned char>(marker->msg.back()) != 0x81)
+        return;
+
+    // The marker distinguishes ZAPD's little-endian table from an already-big-endian file and prevents double-swapping.
+    for (auto& message : file.messages) {
+        for (size_t i = 0; i + 1 < message.msg.size(); i += 2)
+            std::swap(message.msg[i], message.msg[i + 1]);
+    }
+}
+#endif
+
 static void OTRMessage_LoadCustom(const std::string& folderPath, MessageTableEntry*& table, size_t tableSize) {
     auto lst = *Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(folderPath).get();
 
@@ -54,6 +71,11 @@ MessageTableEntry* OTRMessage_LoadTable(const std::string& filePath, bool isNES)
     // OTRTODO: Should not be malloc'ing here. It's fine for now since we check elsewhere that the message table is
     // already null.
     MessageTableEntry* table = (MessageTableEntry*)malloc(sizeof(MessageTableEntry) * file->messages.size());
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    if (filePath == "text/jpn_message_data_static/jpn_message_data_static")
+        OTRMessage_SwapJapaneseTableEndian(*file);
+#endif
 
     for (size_t i = 0; i < file->messages.size(); i++) {
         SetMessageEntry(table[i], file->messages[i]);
