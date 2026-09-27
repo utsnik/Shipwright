@@ -15,6 +15,7 @@ itself: SoH's converter only exists in the PC builds (the Switch port works the 
 | `soh.o2r` | SoH's own assets (fonts, menus). Not game data. |
 | `soh.rpx` | The bare program. Only needed to make your own artwork (see the last section). |
 | `README.md` | This guide. |
+| `fix_blank_skyboxes.py` | Optional: repairs a white screen in two places with Djipi's texture pack (see below). |
 
 ## What you need
 
@@ -71,9 +72,23 @@ sd:/wiiu/apps/soh923/mods/
 ```
 
 Packs are made and hosted by their authors and are never bundled with this port. Most are on
-GameBanana, for example [Djipi's 3DS Experience](https://gamebanana.com/mods/477979). Packs with
-512 px textures have been tested on the Wii U. Bigger packs use more of the console's memory and
-make loading slower.
+GameBanana, for example [Djipi's 3DS Experience](https://gamebanana.com/mods/477979). Djipi's pack
+has been played on the Wii U exactly as downloaded (1024 px textures), with plenty of memory to
+spare in the areas tested. Big packs make scene loading slower.
+
+### White screen in the Kokiri Shop with Djipi's pack
+
+Djipi's pack replaces five "look around" backgrounds with fully transparent pictures: the Kokiri
+Shop (shown while you talk to the shopkeeper) and the Carpenters' Tent. The Wii U draws them white.
+`fix_blank_skyboxes.py` rebuilds those five pictures from **your own** `oot.o2r` and writes a small
+pack that goes after Djipi's in `mods/` (packs load in alphabetical order, and the last one wins):
+
+```
+pip install pillow
+python3 fix_blank_skyboxes.py oot.o2r "Djipi's 3DE - 01 Main Textures.o2r" zz-fix-blank-skyboxes.o2r
+```
+
+Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to undo.
 
 ## Troubleshooting
 
