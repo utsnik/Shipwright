@@ -2642,6 +2642,13 @@ extern "C" void CheckTracker_RecalculateAvailableChecks() {
     CheckTracker::RecalculateAvailableChecks();
 }
 
+#ifdef __WIIU__
+// Scene tag for libultraship's once-a-minute PERF log line (gfx_gx2.cpp).
+extern "C" int wiiu_perf_scene(void) {
+    return gPlayState != nullptr ? gPlayState->sceneNum : -1;
+}
+#endif
+
 extern "C" uint32_t Ship_GetInterpolationFPS() {
     return OTRGlobals::Instance->GetInterpolationFPS();
 }
