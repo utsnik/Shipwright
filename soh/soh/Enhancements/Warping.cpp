@@ -57,7 +57,7 @@ void Warp(WarpPoint& warpPoint) {
         gSaveContext.fileNum = 0xFF;
         gSaveContext.sceneSetupIndex = 0;
         gSaveContext.cutsceneIndex = 0;
-        gSaveContext.linkAge = 0;
+        gSaveContext.linkAge = CVarGetInteger("gWiiU.BenchChild", 0) ? LINK_AGE_CHILD : 0; // dev bench tour
         gSaveContext.nightFlag = 0;
         gSaveContext.skyboxTime = gSaveContext.dayTime = 0x8000;
 
