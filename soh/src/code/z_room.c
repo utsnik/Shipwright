@@ -124,6 +124,29 @@ static s32 Room_SphereOutsideSides(RoomFrustum* f, Vec3f* clip, f32 w, f32 r) {
            (clip->y - w) - r * f->top > 0.0f || (-clip->y - w) - r * f->bottom > 0.0f;
 }
 
+// unk_06 is too small for the side test: in the NTSC 1.2 data 1707 of 1715 cullable entries have vertices
+// outside it (Hyrule Field up to 1.36x, Gerudo Valley up to 30x; checked with wiiu/room_bounds.py). The
+// original only compared it with depth, where fog hides the error, but here a short radius drops terrain
+// that is still on screen. So use the real extent of the entry's display lists (measured once, cached in
+// libultraship) and never side-cull an entry whose lists cannot be measured.
+float FastDisplayListVertexRadius(const char* path, float cx, float cy, float cz);
+
+static f32 Room_SideCullRadius(PolygonDlist2* entry) {
+    f32 r = entry->unk_06;
+    Gfx* lists[2] = { entry->opa, entry->xlu };
+
+    for (s32 i = 0; i < 2; i++) {
+        if (lists[i] != NULL) {
+            f32 real = FastDisplayListVertexRadius((const char*)lists[i], entry->pos.x, entry->pos.y, entry->pos.z);
+            if (real < 0.0f) {
+                return 1.0e9f;
+            }
+            r = MAX(r, real);
+        }
+    }
+    return r;
+}
+
 u32 gWiiURoomEntriesTested = 0;
 u32 gWiiURoomEntriesSideCulled = 0;
 
@@ -178,7 +201,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
         sp90.z = polygonDlist->pos.z;
         SkinMatrix_Vec3fMtxFMultXYZW(&play->viewProjectionMtxF, &sp90, &sp84, &sp80);
         gWiiURoomEntriesTested++;
-        if (sideCull && Room_SphereOutsideSides(&frustum, &sp84, sp80, (f32)polygonDlist->unk_06)) {
+        if (sideCull && Room_SphereOutsideSides(&frustum, &sp84, sp80, Room_SideCullRadius(polygonDlist))) {
             gWiiURoomEntriesSideCulled++;
             continue;
         }
