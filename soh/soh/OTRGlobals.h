@@ -53,10 +53,14 @@ struct ExtensionCacheHash {
     }
 
   private:
-    static size_t Hash(const char* data, size_t size, size_t hash = 1469598103934665603ull) noexcept {
+    // FNV-1a with the constants matching size_t (32-bit on Wii U, 64-bit on desktop).
+    static constexpr size_t kFnvOffset = sizeof(size_t) == 8 ? static_cast<size_t>(1469598103934665603ull) : 2166136261u;
+    static constexpr size_t kFnvPrime = sizeof(size_t) == 8 ? static_cast<size_t>(1099511628211ull) : 16777619u;
+
+    static size_t Hash(const char* data, size_t size, size_t hash = kFnvOffset) noexcept {
         for (size_t i = 0; i < size; ++i) {
             hash ^= static_cast<unsigned char>(data[i]);
-            hash *= 1099511628211ull;
+            hash *= kFnvPrime;
         }
         return hash;
     }
