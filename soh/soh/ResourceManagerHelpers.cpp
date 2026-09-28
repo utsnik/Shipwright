@@ -14,6 +14,7 @@
 #include <fast/Fast3dWindow.h>
 #include <fast/resource/ResourceType.h>
 #include <fast/resource/type/DisplayList.h>
+#include <string_view>
 
 extern "C" PlayState* gPlayState;
 
@@ -160,22 +161,22 @@ extern "C" char** ResourceMgr_ListFiles(const char* searchMask, int* resultSize)
 }
 
 extern "C" uint8_t ResourceMgr_FileExists(const char* filePath) {
-    std::string path = filePath;
-    if (path.substr(0, 7) == "__OTR__") {
-        path = path.substr(7);
+    std::string_view path = filePath;
+    if (path.starts_with("__OTR__")) {
+        path.remove_prefix(7);
     }
 
     return ExtensionCache.contains(path);
 }
 
 extern "C" uint8_t ResourceMgr_FileAltExists(const char* filePath) {
-    std::string path = filePath;
-    if (path.substr(0, 7) == "__OTR__") {
-        path = path.substr(7);
+    std::string_view path = filePath;
+    if (path.starts_with("__OTR__")) {
+        path.remove_prefix(7);
     }
 
-    if (path.substr(0, 4) != "alt/") {
-        path = "alt/" + path;
+    if (!path.starts_with("alt/")) {
+        return ExtensionCache.contains(ExtensionCacheLookup{ "alt/", path });
     }
 
     return ExtensionCache.contains(path);

@@ -24,6 +24,9 @@
 #include <ship/Context.h>
 #include "Enhancements/savestates.h"
 #include "Enhancements/randomizer/randomizer.h"
+#include <cstddef>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -32,7 +35,51 @@ struct ExtensionEntry {
     std::string ext;
 };
 
-extern std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
+struct ExtensionCacheLookup {
+    std::string_view prefix;
+    std::string_view suffix;
+};
+
+struct ExtensionCacheHash {
+    using is_transparent = void;
+
+    size_t operator()(std::string_view value) const noexcept {
+        return Hash(value.data(), value.size());
+    }
+
+    size_t operator()(const ExtensionCacheLookup& value) const noexcept {
+        size_t hash = Hash(value.prefix.data(), value.prefix.size());
+        return Hash(value.suffix.data(), value.suffix.size(), hash);
+    }
+
+  private:
+    static size_t Hash(const char* data, size_t size, size_t hash = 1469598103934665603ull) noexcept {
+        for (size_t i = 0; i < size; ++i) {
+            hash ^= static_cast<unsigned char>(data[i]);
+            hash *= 1099511628211ull;
+        }
+        return hash;
+    }
+};
+
+struct ExtensionCacheEqual {
+    using is_transparent = void;
+
+    bool operator()(std::string_view lhs, std::string_view rhs) const noexcept {
+        return lhs == rhs;
+    }
+
+    bool operator()(const ExtensionCacheLookup& lhs, std::string_view rhs) const noexcept {
+        return lhs.prefix.size() + lhs.suffix.size() == rhs.size() &&
+               rhs.starts_with(lhs.prefix) && rhs.substr(lhs.prefix.size()) == lhs.suffix;
+    }
+
+    bool operator()(std::string_view lhs, const ExtensionCacheLookup& rhs) const noexcept {
+        return (*this)(rhs, lhs);
+    }
+};
+
+extern std::unordered_map<std::string, ExtensionEntry, ExtensionCacheHash, ExtensionCacheEqual> ExtensionCache;
 #include "Enhancements/randomizer/settings.h"
 
 // "soh923", not "soh": Ship::WiiU::Init chdirs to /vol/external01/wiiu/apps/<shortName>,

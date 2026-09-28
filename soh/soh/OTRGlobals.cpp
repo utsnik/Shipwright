@@ -1065,7 +1065,7 @@ extern "C" void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples);
 extern "C" void AudioPlayer_Play(const uint8_t* buf, uint32_t len);
 extern "C" int AudioPlayer_Buffered(void);
 extern "C" int AudioPlayer_GetDesiredBuffered(void);
-std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
+std::unordered_map<std::string, ExtensionEntry, ExtensionCacheHash, ExtensionCacheEqual> ExtensionCache;
 
 void OTRAudio_Thread() {
     while (audio.running) {
