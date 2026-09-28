@@ -94,7 +94,42 @@ typedef struct struct_80095D04 {
 } struct_80095D04; // size = 0x10
 
 // Room Draw Polygon Type 2
+// Wii U port: the original only rejects cullable room entries behind the camera or beyond the fog
+// (depth), leaving left/right/top/bottom to the RSP. Here every such entry costs a full vertex
+// transform on the CPU, so also reject bounding spheres that are wholly outside a side plane.
+// Clip x - k*w is linear in world position, so its minimum over a sphere of radius r is
+// (x - k*w) - r*|row_x - k*row_w|; if that is > 0 the whole sphere is off that side. k widens the
+// horizontal test from the game's 4:3 projection to the window aspect (plus 5% margin).
+// Off switch: gWiiU.RoomFrustumCull 0.
+typedef struct {
+    f32 kx;
+    f32 right, left, top, bottom; // |row_x - kx*row_w|, |row_x + kx*row_w|, |row_y - row_w|, |row_y + row_w|
+} RoomFrustum;
+
+static f32 Room_RowNorm(f32 a, f32 b, f32 c) {
+    return sqrtf(a * a + b * b + c * c);
+}
+
+static void Room_InitFrustum(RoomFrustum* f, MtxF* m) {
+    f32 aspect = OTRGetAspectRatio();
+    f->kx = (aspect > (4.0f / 3.0f) ? aspect / (4.0f / 3.0f) : 1.0f) * 1.05f;
+    f->right = Room_RowNorm(m->xx - f->kx * m->wx, m->xy - f->kx * m->wy, m->xz - f->kx * m->wz);
+    f->left = Room_RowNorm(m->xx + f->kx * m->wx, m->xy + f->kx * m->wy, m->xz + f->kx * m->wz);
+    f->top = Room_RowNorm(m->yx - m->wx, m->yy - m->wy, m->yz - m->wz);
+    f->bottom = Room_RowNorm(m->yx + m->wx, m->yy + m->wy, m->yz + m->wz);
+}
+
+static s32 Room_SphereOutsideSides(RoomFrustum* f, Vec3f* clip, f32 w, f32 r) {
+    return (clip->x - f->kx * w) - r * f->right > 0.0f || (-clip->x - f->kx * w) - r * f->left > 0.0f ||
+           (clip->y - w) - r * f->top > 0.0f || (-clip->y - w) - r * f->bottom > 0.0f;
+}
+
+u32 gWiiURoomEntriesTested = 0;
+u32 gWiiURoomEntriesSideCulled = 0;
+
 void func_80095D04(PlayState* play, Room* room, u32 flags) {
+    RoomFrustum frustum;
+    s32 sideCull = CVarGetInteger("gWiiU.RoomFrustumCull", 1);
     PolygonType2* polygon2;
     PolygonDlist2* polygonDlist;
     struct_80095D04 spB8[SHAPE_SORT_MAX];
@@ -133,12 +168,20 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
 
     assert(polygon2->num <= SHAPE_SORT_MAX);
     sp78 = polygonDlist;
+    if (sideCull) {
+        Room_InitFrustum(&frustum, &play->viewProjectionMtxF);
+    }
 
     for (sp9C = 0; sp9C < polygon2->num; sp9C++, polygonDlist++) {
         sp90.x = polygonDlist->pos.x;
         sp90.y = polygonDlist->pos.y;
         sp90.z = polygonDlist->pos.z;
         SkinMatrix_Vec3fMtxFMultXYZW(&play->viewProjectionMtxF, &sp90, &sp84, &sp80);
+        gWiiURoomEntriesTested++;
+        if (sideCull && Room_SphereOutsideSides(&frustum, &sp84, sp80, (f32)polygonDlist->unk_06)) {
+            gWiiURoomEntriesSideCulled++;
+            continue;
+        }
         if (-(f32)polygonDlist->unk_06 < sp84.z) {
             temp_f2 = sp84.z - polygonDlist->unk_06;
             if (temp_f2 < play->lightCtx.fogFar) {
