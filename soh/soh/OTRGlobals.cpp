@@ -1553,6 +1553,73 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     conf->RegisterVersionUpdater(std::make_shared<SOH::ConfigVersion6Updater>());
     conf->RunVersionUpdates();
 
+#if defined(__WIIU__) && (!defined(WIIU_DIAGNOSTICS) || WIIU_DIAGNOSTICS)
+    // Unattended benchmarking (dev builds only). SoH rewrites shipofharkinian.json on exit, so it cannot
+    // be edited while the game runs; apply "<cvar> int|float|clear <value>" lines from cvar_overrides.txt
+    // once, save the config so the change survives a power-off, and delete the file.
+    if (FILE* ovr = fopen("cvar_overrides.txt", "r")) {
+        char name[128];
+        char type[8];
+        double value;
+        while (fscanf(ovr, "%127s %7s %lf", name, type, &value) == 3) {
+            if (type[0] == 'i') {
+                CVarSetInteger(name, (int32_t)value);
+            } else if (type[0] == 'f') {
+                CVarSetFloat(name, (float)value);
+            } else {
+                CVarClear(name);
+            }
+            SPDLOG_INFO("BENCH cvar override {} {} {}", name, type, value);
+        }
+        fclose(ovr);
+        remove("cvar_overrides.txt");
+        CVarSave();
+    }
+    // gWiiU.BenchTour = N: after booting to a warp point (gSettings.BootSequence 4), visit a fixed list of
+    // entrances N times, ~60 s each, logging "BENCH stop" so the UDP log's per-10 s timing windows can be
+    // grouped per stop. Link is made a child (gWiiU.BenchChild, default 1) and kept at full health.
+    if (CVarGetInteger("gWiiU.BenchTour", 0) > 0) {
+        GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
+            static const uint16_t kTour[] = { 0x185, 0x0CD, 0x0DA, 0x0B1, 0x0DB, 0x0EE,
+                                              0x102, 0x157, 0x138, 0x13D, 0x108, 0x117 };
+            static const int kCount = sizeof(kTour) / sizeof(kTour[0]);
+            static int stop = -1;
+            static auto since = std::chrono::steady_clock::now();
+            if (gPlayState == nullptr) {
+                return;
+            }
+            gSaveContext.health = gSaveContext.healthCapacity;
+            if (gPlayState->transitionTrigger != TRANS_TRIGGER_OFF) {
+                since = std::chrono::steady_clock::now();
+                return;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if (now - since < std::chrono::seconds(stop < 0 ? 15 : 60)) {
+                return;
+            }
+            stop++;
+            if (stop >= kCount * CVarGetInteger("gWiiU.BenchTour", 0)) {
+                if (stop == kCount * CVarGetInteger("gWiiU.BenchTour", 0)) {
+                    SPDLOG_INFO("BENCH done");
+                }
+                since = now;
+                return;
+            }
+            const uint16_t entrance = kTour[stop % kCount];
+            SPDLOG_INFO("BENCH stop {} entrance {:#x}", stop, entrance);
+            if (CVarGetInteger("gWiiU.BenchChild", 1)) {
+                gSaveContext.linkAge = LINK_AGE_CHILD;
+            }
+            gSaveContext.dayTime = gSaveContext.skyboxTime = 0x8000;
+            gSaveContext.nightFlag = 0;
+            gPlayState->nextEntranceIndex = entrance;
+            gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+            gPlayState->transitionType = TRANS_TYPE_INSTANT;
+            since = now;
+        });
+    }
+#endif
+
     SohGui::SetupGuiElements();
     SohGui::SetupMenuElements();
 
