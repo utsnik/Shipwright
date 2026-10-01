@@ -165,5 +165,16 @@ from SoH's own ship icon for that reason.
 
 ## Credits
 
-Ship of Harkinian by HarbourMasters and contributors; libultraship and Fast3D by their authors.
-This port is not affiliated with or endorsed by Nintendo or HarbourMasters.
+- **[HarbourMasters](https://github.com/HarbourMasters/Shipwright) and every Ship of Harkinian
+  contributor.** This is their game engine; the port only adds the Wii U layer. If you enjoy it,
+  support them.
+- **[Kenix3 and the libultraship contributors](https://github.com/Kenix3/libultraship)**, plus the
+  Fast3D authors.
+- **[GaryOderNichts](https://github.com/GaryOderNichts)**, whose original Wii U port of SoH
+  (the GX2 renderer and shader generator) this release builds on.
+- **[Djipi](https://gamebanana.com/mods/477979)** for the 3DS Experience texture pack, which most of
+  the Wii U testing was done with. Download it from Djipi's page, not from a reupload.
+- **devkitPro / wut** and the **[Aroma](https://aroma.foryour.cafe/)** team for the Wii U homebrew
+  toolchain and environment.
+
+This port is not affiliated with or endorsed by Nintendo, HarbourMasters or Djipi.
