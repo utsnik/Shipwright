@@ -107,6 +107,16 @@ Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to u
 
 - Runs at about 20 fps, the original game's rate; busy scenes can dip below that.
 - Distant textures can shimmer (no mipmapping yet).
+- Entering a new area can pause briefly while it loads from the SD card, more so with big
+  texture packs.
+- Some torch and lamp glows in Hyrule Field show through the hills as small yellow dots.
+
+## Source code
+
+This port is two branches on top of SoH 9.2.3:
+[utsnik/Shipwright `wiiu-release`](https://github.com/utsnik/Shipwright/tree/wiiu-release)
+and the GX2 (Wii U graphics) backend in
+[utsnik/libultraship `wiiu-release`](https://github.com/utsnik/libultraship/tree/wiiu-release).
 
 ## Make your own artwork
 
