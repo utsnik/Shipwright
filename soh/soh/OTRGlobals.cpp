@@ -1580,9 +1580,30 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     // grouped per stop. Link is made a child (gWiiU.BenchChild, default 1) and kept at full health.
     if (CVarGetInteger("gWiiU.BenchTour", 0) > 0) {
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
-            static const uint16_t kTour[] = { 0x185, 0x0CD, 0x0DA, 0x0B1, 0x0DB, 0x0EE,
-                                              0x102, 0x157, 0x138, 0x13D, 0x108, 0x117 };
-            static const int kCount = sizeof(kTour) / sizeof(kTour[0]);
+            static const uint16_t kDefaultTour[] = { 0x185, 0x0CD, 0x0DA, 0x0B1, 0x0DB, 0x0EE,
+                                                     0x102, 0x157, 0x138, 0x13D, 0x108, 0x117 };
+            // gWiiU.BenchTourEntrances (string, json only): comma-separated hex entrance ids replacing the
+            // default list, e.g. "0x000,0x004,0x40F".
+            static std::vector<uint16_t> tour = [] {
+                std::vector<uint16_t> list;
+                const char* custom = CVarGetString("gWiiU.BenchTourEntrances", "");
+                for (const char* p = custom; p != nullptr && *p != '\0';) {
+                    char* end = nullptr;
+                    const unsigned long value = strtoul(p, &end, 16);
+                    if (end == p) {
+                        break;
+                    }
+                    list.push_back(static_cast<uint16_t>(value));
+                    p = (*end == ',') ? end + 1 : end;
+                }
+                if (list.empty()) {
+                    list.assign(std::begin(kDefaultTour), std::end(kDefaultTour));
+                }
+                SPDLOG_INFO("BENCH tour has {} entrances", list.size());
+                return list;
+            }();
+            const uint16_t* kTour = tour.data();
+            const int kCount = static_cast<int>(tour.size());
             static int stop = -1;
             static auto since = std::chrono::steady_clock::now();
             if (gPlayState == nullptr) {
