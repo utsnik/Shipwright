@@ -460,3 +460,7 @@ soh/properties.h
 /clang-format
 /clang-format.exe
 *.o2r
+
+# AI session notes and worker logs (local only)
+AI_HANDOFF*
+.codex-*.log
