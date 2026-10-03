@@ -1,6 +1,31 @@
 ![Ship of Harkinian](docs/shiptitle.darkmode.png#gh-dark-mode-only)
 ![Ship of Harkinian](docs/shiptitle.lightmode.png#gh-light-mode-only)
 
+> [!NOTE]
+> **This is an unofficial Wii U port** of Ship of Harkinian 9.2.3. It runs natively under [Aroma](https://aroma.foryour.cafe/). It is not made or supported by HarbourMasters, so please don't take Wii U problems to their Discord. Everything below the Wii U section is the upstream README.
+
+## Ship of Harkinian for Wii U
+
+**[Download the latest Wii U release](https://github.com/utsnik/Shipwright/releases/latest)**
+
+No game data is included. You need your own legally dumped Ocarina of Time ROM.
+
+1. Make `oot.o2r` once on a PC with desktop Ship of Harkinian **9.2.3** ([upstream releases](https://github.com/HarbourMasters/Shipwright/releases)) and your ROM. It has to be 9.2.3.
+2. Copy the files to your SD card:
+   ```
+   sd:/wiiu/apps/soh.wuhb
+   sd:/wiiu/apps/soh923/soh.o2r
+   sd:/wiiu/apps/soh923/oot.o2r
+   ```
+3. Start **Ship of Harkinian** from the Wii U Menu.
+
+Texture packs go in `sd:/wiiu/apps/soh923/mods/`. The full Wii U guide (texture packs, settings, troubleshooting) is in [`soh/wiiu/README.md`](soh/wiiu/README.md), and the same file is in the release zip.
+
+The port builds on [GaryOderNichts](https://github.com/GaryOderNichts)' original Wii U port. The engine is HarbourMasters' work: if you enjoy it, support them.
+
+---
+
+
 ## Website
 
 Official Website: https://www.shipofharkinian.com/
