@@ -2735,6 +2735,15 @@ extern "C" void CheckTracker_RecalculateAvailableChecks() {
 extern "C" int wiiu_perf_scene(void) {
     return gPlayState != nullptr ? gPlayState->sceneNum : -1;
 }
+
+// SoH's archive-preload defaults (the engine's are 16 MB per archive / 64 MB in total): oot.o2r (~34 MB) is the
+// largest SD reader left on area entries once the Djipi packs are BC-converted (2026-10-03 HPROF: ~30% of entry
+// hitch time blocked in SD reads). The 202 MB BC pack stays on the SD: in RAM it would leave less free than
+// KeepAltCache's 160 MB floor. A value in the json still wins.
+extern "C" void wiiu_o2r_preload_defaults(int32_t* maxArchiveMB, int32_t* budgetMB) {
+    *maxArchiveMB = 40;
+    *budgetMB = 120;
+}
 #endif
 
 extern "C" uint32_t Ship_GetInterpolationFPS() {
