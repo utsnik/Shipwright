@@ -153,6 +153,7 @@ u32 gWiiURoomEntriesSideCulled = 0;
 void func_80095D04(PlayState* play, Room* room, u32 flags) {
     RoomFrustum frustum;
     s32 sideCull = CVarGetInteger("gWiiU.RoomFrustumCull", 1);
+    s32 depthReal = CVarGetInteger("gWiiU.RoomDepthRealRadius", 1);
     PolygonType2* polygon2;
     PolygonDlist2* polygonDlist;
     struct_80095D04 spB8[SHAPE_SORT_MAX];
@@ -205,9 +206,16 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
             gWiiURoomEntriesSideCulled++;
             continue;
         }
-        if (-(f32)polygonDlist->unk_06 < sp84.z) {
+        // The behind-camera and fog tests use the same short unk_06: in Hyrule Field near the Kokiri exit a chunk
+        // whose centre is behind the camera still reaches the screen, so the ground behind Link popped out. Test
+        // with the measured extent instead (sorting keeps unk_06). Off switch: gWiiU.RoomDepthRealRadius 0.
+        f32 depthRadius = polygonDlist->unk_06;
+        if (depthReal) {
+            depthRadius = Room_SideCullRadius(polygonDlist);
+        }
+        if (-depthRadius < sp84.z) {
             temp_f2 = sp84.z - polygonDlist->unk_06;
-            if (temp_f2 < play->lightCtx.fogFar) {
+            if (sp84.z - depthRadius < play->lightCtx.fogFar) {
                 phi_v0 = spB4;
                 spA4->unk_00 = polygonDlist;
                 spA4->unk_04 = temp_f2;
