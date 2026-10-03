@@ -490,7 +490,10 @@ void GameState_Destroy(GameState* gameState) {
     // patching system.
     ResourceMgr_ClearSkeletons();
 
-    if (ResourceMgr_IsAltAssetsEnabled()) {
+    // Wii U experiment (2026-10-03, default off): gWiiU.KeepAltCache 1 keeps the HD (alt/) resources and the GPU
+    // texture cache across scene changes. Dropping them made every area entry - even straight back into the room just
+    // left - re-read, re-inflate and re-upload all of its HD textures (~0.3 s of each 0.45-0.65 s cached entry).
+    if (ResourceMgr_IsAltAssetsEnabled() && !CVarGetInteger("gWiiU.KeepAltCache", 0)) {
         ResourceUnloadDirectory("alt/*");
         gfx_texture_cache_clear();
     }
