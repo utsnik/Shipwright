@@ -1553,6 +1553,24 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     conf->RegisterVersionUpdater(std::make_shared<SOH::ConfigVersion6Updater>());
     conf->RunVersionUpdates();
 
+#ifdef __WIIU__
+    // Wii U defaults, applied only while a setting has never been set (the menu then shows the real value and the
+    // player can still change it). Set here, before ShipInit::InitAll, so the hooks see them on the first scene:
+    // 30 fps holds at every benchmark stop; Fix Vanishing Paths = No Vanish (2), since 720p z-fights the dirt-path
+    // decals otherwise; KeepAltCache with a 110 MB floor (160 flushed every scene once oot.o2r is preloaded).
+    {
+        auto setDefault = [](const char* name, int32_t value) {
+            if (CVarGet(name) == nullptr) {
+                CVarSetInteger(name, value);
+            }
+        };
+        setDefault(CVAR_SETTING("InterpolationFPS"), 30);
+        setDefault(CVAR_ENHANCEMENT("SceneSpecificDirtPathFix"), 2);
+        setDefault("gWiiU.KeepAltCache", 1);
+        setDefault("gWiiU.KeepAltCacheMinFreeMB", 110);
+    }
+#endif
+
 #if defined(__WIIU__) && (!defined(WIIU_DIAGNOSTICS) || WIIU_DIAGNOSTICS)
     // Unattended benchmarking (dev builds only). SoH rewrites shipofharkinian.json on exit, so it cannot
     // be edited while the game runs; apply "<cvar> int|float|clear <value>" lines from cvar_overrides.txt
