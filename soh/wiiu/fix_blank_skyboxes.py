@@ -51,7 +51,24 @@ def main():
     if zipfile.is_zipfile(template_path):
         header = zipfile.ZipFile(template_path).read("alt/textures/vr_KSVR_static/gKokiriShopBgTex")[:64]
     else:
-        header = open(template_path, "rb").read()[:64]
+        try:
+            from mpyq import MPQArchive
+        except ImportError:
+            print("pip install mpyq", file=sys.stderr)
+            raise SystemExit(1)
+        pack = MPQArchive(template_path)
+        candidates = (
+            "alt/textures/vr_KSVR_static/gKokiriShopBgTex",
+            "textures/vr_KSVR_static/gKokiriShopBgTex",
+        )
+        for name in candidates:
+            try:
+                header = pack.read_file(name)[:64]
+                break
+            except KeyError:
+                continue
+        else:
+            raise KeyError("gKokiriShopBgTex not found in MPQ")
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as out:
         for d, tex, tlut in PAIRS:
             w, h, idx = texture(oot, f"textures/{d}_static/{tex}")

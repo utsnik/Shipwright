@@ -7,15 +7,19 @@ This release contains **no game data**. You supply your own Ocarina of Time ROM 
 an `oot.o2r` file once, on a PC, with the desktop version of SoH. The Wii U cannot do that step
 itself: SoH's converter only exists in the PC builds (the Switch port works the same way).
 
-## What is in the zip
+## What is in the SD-card zip
 
-| File | What it is |
+Extract this zip to the root of the SD card. It mirrors the required SD-card layout:
+
+| Path | What it is |
 |---|---|
-| `soh.wuhb` | The app you start from the Wii U Menu. |
-| `soh.o2r` | SoH's own assets (fonts, menus). Not game data. |
-| `soh.rpx` | The bare program. Only needed to make your own artwork (see the last section). |
-| `README.md` | This guide. |
-| `fix_blank_skyboxes.py` | Optional: repairs a white screen in two places with Djipi's texture pack (see below). |
+| `sd:/wiiu/apps/soh.wuhb` | The app you start from the Wii U Menu. |
+| `sd:/wiiu/apps/soh923/soh.o2r` | SoH's own assets (fonts, menus). Not game data. |
+| `sd:/wiiu/apps/soh923/README.md` | This guide. |
+| `sd:/wiiu/apps/soh923/fix_blank_skyboxes.py` | Optional skybox repair script. |
+
+After extracting it, add only your generated `oot.o2r` to `sd:/wiiu/apps/soh923/`.
+The bare `soh.rpx` is in a separate `-extras` zip for custom artwork; it is not part of the SD-card zip.
 
 ## What you need
 
@@ -84,9 +88,12 @@ Shop (shown while you talk to the shopkeeper) and the Carpenters' Tent. The Wii 
 pack that goes after Djipi's in `mods/` (packs load in alphabetical order, and the last one wins):
 
 ```
-pip install pillow
-python3 fix_blank_skyboxes.py oot.o2r "Djipi's 3DE - 01 Main Textures.o2r" zz-fix-blank-skyboxes.o2r
+pip install pillow mpyq
+python3 fix_blank_skyboxes.py oot.o2r "Djipi's 3DE - 01 Main Textures.otr" zz-fix-blank-skyboxes.o2r
 ```
+
+The Djipi `01 Main Textures` archive may be either `.o2r` (ZIP) or `.otr` (MPQ).
+The script uses the optional `mpyq` package for `.otr` files.
 
 Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to undo.
 
@@ -94,9 +101,9 @@ Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to u
 
 - **"Outdated ROM Archives"**: your `oot.o2r` was made by a different SoH version. Make it again
   with SoH 9.2.3 (step 1).
-- **"No O2R files found. Generate one now?"**: the app cannot find `oot.o2r`. Choose **No**
-  (the Wii U cannot generate it), then check that `soh.o2r` and `oot.o2r` are both in
-  `sd:/wiiu/apps/soh923/`, spelled exactly like that.
+- **"No O2R files found. Generate one now?"**: the app cannot find `oot.o2r`. The Wii U popup
+  explains that it must be generated on a PC; press **OK** to exit, then check that `soh.o2r` and
+  `oot.o2r` are both in `sd:/wiiu/apps/soh923/`, spelled exactly like that.
 - **The screen freezes and the console stops responding**: hold the power button to turn it off,
   then start it again. Please report what you were doing when it happened.
 - **Settings did not stick**: change them in the in-game menu. Don't edit `shipofharkinian.json`
