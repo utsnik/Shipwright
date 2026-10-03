@@ -462,6 +462,30 @@ void GameState_Init(GameState* gameState, GameStateFunc init, GraphicsContext* g
     osSyncPrintf("game コンストラクタ終了\n"); // "game constructor end"
 }
 
+#ifdef __WIIU__
+void wiiu_get_perf_big_heap(uint32_t* free_bytes, uint32_t* largest_free_bytes);
+
+// Keeping the cache costs ~6 MB of big heap per new area (276 -> 229 MB over 11 areas, flat on revisits), so it is
+// kept only while the big heap has room: below gWiiU.KeepAltCacheMinFreeMB (free or largest block) this scene change
+// unloads as before, which hands everything back.
+static s32 WiiU_KeepAltCache(void) {
+    if (!CVarGetInteger("gWiiU.KeepAltCache", 0)) {
+        return 0;
+    }
+    uint32_t freeBytes = 0;
+    uint32_t largest = 0;
+    wiiu_get_perf_big_heap(&freeBytes, &largest);
+    uint32_t minBytes = (uint32_t)CVarGetInteger("gWiiU.KeepAltCacheMinFreeMB", 160) << 20;
+    if (freeBytes > minBytes && largest > minBytes) {
+        return 1;
+    }
+    lusprintf(__FILE__, __LINE__, 2, "KEEPALT: flush bigFree=%u bigLargest=%u MB", freeBytes >> 20, largest >> 20);
+    return 0;
+}
+#else
+#define WiiU_KeepAltCache() 0
+#endif
+
 void GameState_Destroy(GameState* gameState) {
     osSyncPrintf("game デストラクタ開始\n"); // "game destructor start"
     func_800C3C20();
@@ -490,10 +514,10 @@ void GameState_Destroy(GameState* gameState) {
     // patching system.
     ResourceMgr_ClearSkeletons();
 
-    // Wii U experiment (2026-10-03, default off): gWiiU.KeepAltCache 1 keeps the HD (alt/) resources and the GPU
-    // texture cache across scene changes. Dropping them made every area entry - even straight back into the room just
-    // left - re-read, re-inflate and re-upload all of its HD textures (~0.3 s of each 0.45-0.65 s cached entry).
-    if (ResourceMgr_IsAltAssetsEnabled() && !CVarGetInteger("gWiiU.KeepAltCache", 0)) {
+    // Wii U (2026-10-03, default off): gWiiU.KeepAltCache 1 keeps the HD (alt/) resources and the GPU texture cache
+    // across scene changes. Dropping them made every area entry - even straight back into the room just left -
+    // re-read, re-inflate and re-upload all of its HD textures (~0.3 s of each 0.45-0.65 s cached entry).
+    if (ResourceMgr_IsAltAssetsEnabled() && !WiiU_KeepAltCache()) {
         ResourceUnloadDirectory("alt/*");
         gfx_texture_cache_clear();
     }
