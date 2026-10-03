@@ -5,6 +5,9 @@
 #include <ship/utils/StringHelper.h>
 
 #include "mod_menu.h"
+#ifdef __WIIU__
+#include "WiiUModProfile.h"
+#endif
 #include "soh/OTRGlobals.h"
 #include "soh/resource/type/Skeleton.h"
 #include "soh/SohGui/MenuTypes.h"
@@ -155,10 +158,35 @@ void UpdateModFiles(bool init = false, bool reset = false) {
                 filePaths.emplace(filename, p.path());
             }
             if (tempMods.size() > 0) {
+#ifdef __WIIU__
+                // New packs from Djipi's 3DS Experience / Art Plus Link start in the play-tested selection and
+                // order (WiiUModProfile.h); every other new pack is enabled as upstream does.
+                bool artPlusPresent = false;
+                for (const auto& [path, name] : tempMods) {
+                    artPlusPresent |= WiiUModProfile::IsArtPlus(name);
+                }
+                for (const auto& name : enabledModFiles) {
+                    artPlusPresent |= WiiUModProfile::IsArtPlus(name);
+                }
+                std::vector<std::string> newlyEnabled;
+                for (const auto& [path, name] : tempMods) {
+                    if (WiiUModProfile::StartsDisabled(name, artPlusPresent)) {
+                        disabledModFiles.push_back(name);
+                    } else {
+                        newlyEnabled.push_back(name);
+                    }
+                }
+                WiiUModProfile::SortNew(newlyEnabled);
+                changed |= !newlyEnabled.empty();
+                for (const auto& name : newlyEnabled) {
+                    enabledModFiles.push_back(name);
+                }
+#else
                 changed = true;
                 for (auto [path, name] : tempMods) {
                     enabledModFiles.push_back(name);
                 }
+#endif
                 tempMods.clear();
             }
             if (init) {
