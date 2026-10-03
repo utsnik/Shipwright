@@ -103,9 +103,20 @@ Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to u
   while the game is running, because the game rewrites it when it closes.
 - Always leave with **HOME -> Close** before taking the SD card out.
 
+## Wii U defaults
+
+On first start the port sets three options for the Wii U. Change any of them in the in-game SoH
+menu; your choice is kept.
+
+- **30 fps** (Settings). The original game runs at 20; set it back there if a scene feels uneven.
+- **Fix Vanishing Paths: No Vanish** (Enhancements). Without it, dirt paths in Hyrule Field, Kokiri
+  Forest and Hyrule Castle are cut by the grass at 720p. Link can look slightly sunk into some paths.
+- **KeepAltCache** (texture packs only): keeps pack textures between areas while there is memory to
+  spare, so going back to an area you just left loads faster.
+
 ## Known limits
 
-- Runs at about 20 fps, the original game's rate; busy scenes can dip below that.
+- Busy scenes can dip below 30 fps; 20 fps is the safe setting for them.
 - Distant textures can shimmer (no mipmapping yet).
 - Entering a new area can pause briefly while it loads from the SD card, more so with big
   texture packs.
