@@ -460,10 +460,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #elif defined(__WIIU__)
     if (shouldRegen) {
         SohGui::RegisterPopup("Outdated ROM Archives",
-                              "You've launched the Ship with an old a ROM O2R file.\n\n"
-                              "Please generate a ROM O2R and relaunch.\n\n"
-                              "Press and hold the Power button to shutdown...",
-                              "OK", "", [&]() { exit(1); });
+                              "Your oot.o2r was made with a different Ship of Harkinian version.\n\n"
+                              "Make oot.o2r once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
+                              "Ocarina of Time ROM. Put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
+                              "See README.md in the release zip for instructions.\n\n"
+                              "Press HOME, then choose Close.",
+                              "OK");
     }
     // Upstream called OSFatal() with no argument (it takes a message, so this never
     // compiled). Dropped rather than fixed: it would red-screen the console before the
@@ -522,16 +524,30 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     msg = "\x1b[4;2HPlease re-extract it from the download.\n"
                           "\x1b[6;2HPress the Home button to exit...";
 #elif defined(__WIIU__)
-                    msg = "Please extract the soh.o2r from the Ship of Harkinian download\nto your folder.\n\nPress "
-                          "and hold the power\n"
-                          "button to shutdown...";
+                    if (!std::filesystem::exists(portArchivePath)) {
+                        msg = "Missing soh.o2r. Put soh.o2r and oot.o2r in sd:/wiiu/apps/soh923/.\n\n"
+                              "Make oot.o2r once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
+                              "Ocarina of Time ROM.\n\n"
+                              "See README.md in the release zip for instructions.\n\n"
+                              "Press HOME, then choose Close.";
+                    } else {
+                        msg = "Your soh.o2r was made with a different Ship of Harkinian version.\n\n"
+                              "Use the soh.o2r from the same Ship of Harkinian 9.2.3 release as oot.o2r, and put "
+                              "both in sd:/wiiu/apps/soh923/.\n\n"
+                              "See README.md in the release zip for instructions.\n\n"
+                              "Press HOME, then choose Close.";
+                    }
 #else
                     msg =
                         "Please extract the soh.o2r from the Ship of Harkinian download to your folder.\n\nExiting...";
 #endif
                     std::string title =
                         !std::filesystem::exists(portArchivePath) ? "Missing soh.o2r" : "soh.o2r is outdated";
+#if defined(__WIIU__)
+                    SohGui::RegisterPopup(title, msg, "OK");
+#else
                     SohGui::RegisterPopup(title, msg, "OK", "", [&]() { exit(1); });
+#endif
                 }
                 continue;
             }
@@ -749,9 +765,19 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName));
 
                 if (!ootO2RExists) {
+#if defined(__WIIU__)
+                    SohGui::RegisterPopup(
+                        "No ROM Archives",
+                        "Missing oot.o2r. Make it once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
+                        "Ocarina of Time ROM, then put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
+                        "An outdated oot.o2r was made with a different SoH version. See README.md in the release zip "
+                        "for instructions.\n\nPress HOME, then choose Close.",
+                        "OK");
+#else
                     SohGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
                                           "", [&]() { exit(0); });
+#endif
                 }
                 extractDone = true;
                 continue;
