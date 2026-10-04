@@ -157,6 +157,22 @@ void UpdateModFiles(bool init = false, bool reset = false) {
                 }
                 filePaths.emplace(filename, p.path());
             }
+#ifdef __WIIU__
+            // One-time pass on the first start of a build with the profile: r1 had none and switched every pack on
+            // (Djipi's Link under Art Plus, the heavy Hyrule Field terrain, all optional extras), so every pack is
+            // treated as new once and gets the tested selection and order. Afterwards only newly found packs are
+            // touched, so packs the player switches on stay on.
+            if (init && !CVarGetInteger("gWiiU.ModProfileApplied", 0)) {
+                for (const auto& name : enabledModFiles) {
+                    if (filePaths.contains(name)) {
+                        tempMods.emplace(filePaths.at(name).lexically_normal().generic_string(), name);
+                    }
+                }
+                enabledModFiles.clear();
+                CVarSetInteger("gWiiU.ModProfileApplied", 1);
+                changed = true;
+            }
+#endif
             if (tempMods.size() > 0) {
 #ifdef __WIIU__
                 // New packs from Djipi's 3DS Experience / Art Plus Link start in the play-tested selection and

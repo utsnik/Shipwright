@@ -2,7 +2,8 @@
 
 // Wii U defaults for packs found in mods/ for the first time: which of the files in Djipi's 3DS Experience and
 // Skilar's Art Plus Link (GameBanana 477979) start switched on, and in what order. This is the set that was
-// play-tested on the console in October 2026. Packs the user already has in EnabledMods are never touched, and a
+// play-tested on the console in October 2026. Packs the user already has in EnabledMods are never touched (except once,
+// on the first start with this profile: see gWiiU.ModProfileApplied in mod_menu.cpp), and a
 // pack that starts off can be switched on in the mod menu (it is then kept in EnabledMods).
 //
 // Pure functions on file names (no extension, as the mod menu stores them) so they can be tested on a PC.
