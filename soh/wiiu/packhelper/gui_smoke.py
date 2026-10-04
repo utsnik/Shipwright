@@ -306,24 +306,12 @@ def run() -> dict[str, object]:
         root.geometry("720x480+80+60")
         timer = TkTimer(root)
         dialogs = PatchedDialogs(root, card, packs)
-        original_find_sd_card = packhelper.find_sd_card
-        original_find_wiiu_card = packhelper.find_wiiu_card
         original_check_free_space = packhelper.check_free_space
         original_select_packs = packhelper.select_packs
         original_run_install = packhelper.run_install
-        detected_card: list[Path | None] = [None]
-        detected_wiiu_card: list[Path | None] = [None]
-        detection_times: list[float] = []
         release_install = threading.Event()
         worker_started = threading.Event()
         worker_threads: list[int] = []
-
-        def fake_find_sd_card(*_args: object, **_kwargs: object) -> Path | None:
-            detection_times.append(time.monotonic())
-            return detected_card[0]
-
-        def fake_find_wiiu_card(*_args: object, **_kwargs: object) -> Path | None:
-            return detected_wiiu_card[0]
 
         def guarded_select_packs(paths):
             if threading.get_ident() == timer.main_thread:
@@ -349,48 +337,48 @@ def run() -> dict[str, object]:
                 tuple(selection.label for selection in selections),
             )
 
-        packhelper.find_sd_card = fake_find_sd_card
-        packhelper.find_wiiu_card = fake_find_wiiu_card
         packhelper.select_packs = guarded_select_packs
         packhelper.run_install = fake_run_install
         try:
             window = timer.call("PackHelperWindow", lambda: packhelper.PackHelperWindow(root, []))
             timer.call("root.update_idletasks", root.update_idletasks)
-            _pump(root, timer, 2.25)
+            _pump(root, timer)
             startup_text = _all_text(root)
-            assert "Put your Wii U SD card in this computer" in startup_text
-            _find_button(root, lambda text: text == "Look again")
-            _find_button(root, lambda text: text == "Choose the SD card folder myself...")
+            assert "Choose your SD card" in startup_text
+            assert "every 2 seconds" not in startup_text
+            assert "Look again" not in startup_text
+            _find_button(root, lambda text: text == "Choose your SD card...")
+            next_button = _find_button(root, lambda text: text == "Next")
+            assert str(next_button.cget("state")) == "disabled"
             assert not dialogs.calls, f"startup opened a dialog before user action: {dialogs.calls!r}"
-            assert len(detection_times) >= 2, "the SD card was not checked again automatically"
             screenshots.append(_capture(root, "01-startup-no-card.png"))
 
-            detected_wiiu_card[0] = card_without_soh
-            look_again = _find_button(root, lambda text: text == "Look again")
-            timer.call("Look again without SoH", look_again.invoke)
+            dialogs.card = card_without_soh
+            choose_sd = _find_button(root, lambda text: text == "Choose your SD card...")
+            timer.call("Choose card without SoH", choose_sd.invoke)
             _wait_for(
                 root,
                 timer,
                 lambda: packhelper.SOH_NOT_INSTALLED in _all_text(root),
                 "the no-SoH card message was not displayed",
             )
+            assert str(_find_button(root, lambda text: text == "Next").cget("state")) == "disabled"
             screenshots.append(_capture(root, "card-without-soh.png"))
 
-            detected_wiiu_card[0] = None
-            detected_card[0] = card_without_oot
-            look_again = _find_button(root, lambda text: text == "Look again")
-            timer.call("Look again without oot.o2r", look_again.invoke)
+            dialogs.card = card_without_oot
+            choose_sd = _find_button(root, lambda text: text == "Choose your SD card...")
+            timer.call("Choose card without oot.o2r", choose_sd.invoke)
             _wait_for(
                 root,
                 timer,
-                lambda: "wiiu/apps/soh923/" in _all_text(root) and getattr(window, "card", None) is None,
+                lambda: packhelper.OOT_MISSING in _all_text(root) and getattr(window, "card", None) is None,
                 "the missing-oot.o2r message was not displayed",
             )
             screenshots.append(_capture(root, "missing-oot.png"))
 
-            detected_card[0] = card
-            look_again = _find_button(root, lambda text: text == "Look again")
-            timer.call("Look again", look_again.invoke)
+            dialogs.card = card
+            choose_sd = _find_button(root, lambda text: text == "Choose your SD card...")
+            timer.call("Choose valid card", choose_sd.invoke)
             _wait_for(root, timer, lambda: getattr(window, "card", None) is not None, "SD card was not accepted")
             screenshots.append(_capture(root, "02-card-found.png"))
 
@@ -474,8 +462,6 @@ def run() -> dict[str, object]:
             timer.assert_fast()
         finally:
             release_install.set()
-            packhelper.find_sd_card = original_find_sd_card
-            packhelper.find_wiiu_card = original_find_wiiu_card
             packhelper.check_free_space = original_check_free_space
             packhelper.select_packs = original_select_packs
             packhelper.run_install = original_run_install

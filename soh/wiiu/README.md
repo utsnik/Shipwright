@@ -71,8 +71,14 @@ Put the card back, start the Wii U and open **Ship of Harkinian** from the Wii U
 
 On Windows, download `SoH-WiiU-Pack-Helper.exe` from the
 [release page](https://github.com/utsnik/Shipwright/releases). Put the Wii U SD card in the PC,
-run the helper, pick the downloaded pack zips, press **Start**, and wait for **Done**. Windows
-SmartScreen may say **Windows protected your PC**; click **More info**, then **Run anyway**.
+run the helper, click **Choose your SD card...** and pick the card (for example `E:\`), pick the
+downloaded pack zips, press **Start**, and wait for **Done**. Windows SmartScreen may say
+**Windows protected your PC**; click **More info**, then **Run anyway**.
+
+Using the stroopwafel **USB Partition** plugin instead of an SD card? Pick the FAT32 part of the
+USB drive. Windows may also show the drive's Wii U part and ask to format it: click **Cancel**,
+or you lose the games installed on it. You can also pick a folder on your PC that contains
+`wiiu/apps/soh923` (with `oot.o2r`), and copy the result to the card afterwards.
 
 On Linux and macOS, run `python3 -m packhelper` from `soh/wiiu/` in the source checkout.
 

@@ -61,19 +61,27 @@ except ModuleNotFoundError:
 EXPECTED_VERSION = (9, 2, 3)
 PACK_SUFFIXES = (".zip", ".otr", ".o2r")
 MODS_PLACEHOLDER = "PUT-TEXTURE-PACKS-HERE.txt"
+# Where the tested packs are downloaded (both are files on this one page). Never bundled with the helper.
+PACK_DOWNLOADS = (
+    ("Djipi's 3DS Experience + Skilar's Art Plus Link (GameBanana)", "https://gamebanana.com/mods/477979"),
+)
 DONE_MESSAGE = "Done - put the SD card back in your Wii U and start Ship of Harkinian"
 
-SD_NOT_FOUND = "The SD card was not found; insert it and try again, or choose its folder."
+SD_NOT_FOUND = "No Ship of Harkinian here: choose the SD card that has wiiu/apps/soh923 with oot.o2r in it"
 SOH_NOT_INSTALLED = (
-    "Found your Wii U SD card, but Ship of Harkinian is not on it yet. Install it first "
-    "(see the README), then click Look again."
+    "Ship of Harkinian is not installed on this SD card yet. Install it first "
+    "(see the README), then choose the SD card folder."
 )
 OOT_MISSING = (
     "Ship of Harkinian is installed, but oot.o2r is missing or has no version marker. "
-    "Copy the SoH 9.2.3 Wii U oot.o2r to wiiu/apps/soh923/ on the SD card, then click Look again."
+    "Copy the SoH 9.2.3 Wii U oot.o2r to wiiu/apps/soh923/ on the SD card, then choose the folder again."
 )
 OOT_WRONG_VERSION = (
-    "This oot.o2r is from another SoH version; use the SoH 9.2.3 Wii U oot.o2r and try again."
+    "This oot.o2r is from another SoH version; use the SoH 9.2.3 Wii U oot.o2r, then choose the folder again."
+)
+CLI_SD_ROOT_REQUIRED = (
+    "CLI mode needs an SD card path; pass --sd-root PATH with the card root or a folder containing "
+    "wiiu/apps/soh923."
 )
 NOT_ENOUGH_SPACE = (
     "There is not enough free space; use a larger SD card or free some space, then try again."
@@ -176,7 +184,7 @@ def _game_dir_for(path: Path) -> Path | None:
 
 
 def _wiiu_root_for(path: Path) -> Path | None:
-    """Return the card root when *path* has a Wii U directory."""
+    """Return the selected card root when *path* has a Wii U directory."""
     path = path.expanduser()
     checks = ((path, path / "wiiu"), (path.parent, path))
     for root, wiiu_dir in checks:
@@ -211,101 +219,13 @@ def _card_for(path: Path) -> SdCard | None:
     return SdCard(root=root, game_dir=game_dir)
 
 
-def _unescape_mount(path: str) -> str:
-    return path.replace(r"\040", " ").replace(r"\011", "\t").replace(r"\134", "\\")
-
-
-def _candidate_roots() -> Iterable[Path]:
-    if os.name == "nt":
-        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            yield Path(f"{letter}:\\")
-        return
-
-    yielded: set[str] = set()
-
-    def add(path: Path) -> Iterable[Path]:
-        key = os.path.normcase(str(path))
-        if key not in yielded:
-            yielded.add(key)
-            yield path
-
-    # A direct check also supports an SD card mounted at a conventional path
-    # that is not listed in /proc/mounts inside a container or test sandbox.
-    for path in (Path("/"), Path("/media"), Path("/mnt"), Path("/run/media"), Path("/Volumes")):
-        yield from add(path)
-        try:
-            if path.is_dir():
-                for child in sorted(path.iterdir()):
-                    if child.is_dir():
-                        yield from add(child)
-                        if path.name == "run" or path.name == "media":
-                            try:
-                                for grandchild in sorted(child.iterdir()):
-                                    if grandchild.is_dir():
-                                        yield from add(grandchild)
-                            except OSError:
-                                pass
-        except OSError:
-            pass
-
-    try:
-        mounts = Path("/proc/mounts").read_text(errors="replace").splitlines()
-    except OSError:
-        mounts = []
-    for line in mounts:
-        fields = line.split()
-        if len(fields) >= 2:
-            yield from add(Path(_unescape_mount(fields[1])))
-
-
-def find_sd_card(search_roots: Iterable[Path] | None = None) -> Path | None:
-    """Find a root containing ``wiiu/apps/soh923/``.
-
-    ``search_roots`` is intentionally injectable so tests and the CLI can use
-    a synthetic card without scanning the host's real mounts.
-    """
-    roots = search_roots if search_roots is not None else _candidate_roots()
-    seen: set[str] = set()
-    for candidate in roots:
-        path = Path(candidate).expanduser()
-        key = os.path.normcase(os.path.abspath(str(path)))
-        if key in seen:
-            continue
-        seen.add(key)
-        card = _card_for(path)
-        if card is not None:
-            return card.root
-    return None
-
-
-def find_wiiu_card(search_roots: Iterable[Path] | None = None) -> Path | None:
-    """Find a card-shaped folder even when SoH has not been installed yet."""
-    roots = search_roots if search_roots is not None else _candidate_roots()
-    seen: set[str] = set()
-    for candidate in roots:
-        path = Path(candidate).expanduser()
-        key = os.path.normcase(os.path.abspath(str(path)))
-        if key in seen:
-            continue
-        seen.add(key)
-        root = _wiiu_root_for(path)
-        if root is None:
-            continue
-        try:
-            if not (root / "wiiu" / "apps" / "soh923").is_dir():
-                return root
-        except OSError:
-            continue
-    return None
-
-
-def locate_sd_card(root: Path | None = None) -> SdCard:
-    if root is not None:
-        card = _card_for(Path(root))
-    else:
-        detected = find_sd_card()
-        card = _card_for(detected) if detected is not None else None
+def locate_sd_card(root: Path) -> SdCard:
+    """Validate the folder explicitly chosen by the user."""
+    selected = Path(root).expanduser()
+    card = _card_for(selected)
     if card is None:
+        if _wiiu_root_for(selected) is not None:
+            raise SohNotInstalled()
         raise SdCardNotFound()
     return card
 
@@ -621,7 +541,7 @@ def copy_directory_with_progress(
 
 
 def run_install(
-    sd_root: Path | None,
+    sd_root: Path,
     pack_paths: Iterable[Path],
     *,
     oot_path: Path | None = None,
@@ -745,6 +665,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _run_cli(args: argparse.Namespace) -> int:
     paths = [*(args.pack_options or ()), *args.paths]
+    if args.sd_root is None:
+        print(CLI_SD_ROOT_REQUIRED, file=sys.stderr)
+        return 2
     try:
         result = run_install(
             args.sd_root,
@@ -781,9 +704,9 @@ class PackHelperWindow:
         self.pack_paths: list[Path] = []
         self.pack_labels: dict[str, str] = {}
         self.cancel_event = threading.Event()
-        self._card_check_running = False
+        self._card_validation_running = False
         self.step = 1
-        self.status = tk.StringVar(value="Put your Wii U SD card in this computer.")
+        self.status = tk.StringVar(value="Choose your SD card folder to continue.")
         self.progress_value = tk.IntVar(value=0)
         self.progress_text = tk.StringVar(value="")
         self.required_space = 0
@@ -791,9 +714,6 @@ class PackHelperWindow:
         root.minsize(600, 360)
         root.protocol("WM_DELETE_WINDOW", root.destroy)
         self._show_step_one()
-        # Let Tk paint the first screen before doing any disk probing or
-        # opening a user-invoked dialog.
-        root.after(0, self._start_card_check)
 
     def _error(self, error: BaseException | str) -> None:
         self.messagebox.showerror("SoH Wii U Pack Helper", user_message(error) if isinstance(error, BaseException) else error)
@@ -811,48 +731,39 @@ class PackHelperWindow:
     def _pack_key(path: Path) -> str:
         return os.path.normcase(os.path.abspath(str(path)))
 
-    def _start_card_check(self, selected: Path | None = None) -> None:
-        if self._card_check_running:
+    def _start_card_validation(self, selected: Path) -> None:
+        if self._card_validation_running:
             return
-        self._card_check_running = True
-        self.status.set("Looking for the SD card...")
-        threading.Thread(target=self._card_check_worker, args=(selected,), daemon=True).start()
+        self.card = None
+        self.oot = None
+        self._card_validation_running = True
+        self.status.set("Checking the chosen folder...")
+        self._show_step_one()
+        threading.Thread(target=self._card_validation_worker, args=(selected,), daemon=True).start()
 
-    def _card_check_worker(self, selected: Path | None) -> None:
+    def _card_validation_worker(self, selected: Path) -> None:
         try:
-            search_roots = [selected] if selected is not None else None
-            detected = find_sd_card(search_roots)
-            if detected is None:
-                if find_wiiu_card(search_roots) is not None:
-                    raise SohNotInstalled()
-                raise SdCardNotFound()
-            card = locate_sd_card(detected)
+            card = locate_sd_card(selected)
             oot = self.explicit_oot or card.game_dir / "oot.o2r"
             validate_oot(oot)
         except BaseException as error:
-            self.root.after(0, lambda error=error, selected=selected: self._card_check_finished(error=error, selected=selected))
+            self.root.after(0, lambda error=error: self._card_validation_finished(error=error))
         else:
-            self.root.after(0, lambda: self._card_check_finished(card=card, oot=oot))
+            self.root.after(0, lambda: self._card_validation_finished(card=card, oot=oot))
 
-    def _card_check_finished(
+    def _card_validation_finished(
         self,
         *,
         card: SdCard | None = None,
         oot: Path | None = None,
         error: BaseException | None = None,
-        selected: Path | None = None,
     ) -> None:
-        self._card_check_running = False
+        self._card_validation_running = False
         if error is not None:
             self.card = None
             self.oot = None
-            if isinstance(error, SdCardNotFound):
-                self.status.set("No SD card found yet. Put it in this computer and click Look again.")
-            else:
-                self.status.set(user_message(error))
+            self.status.set(user_message(error))
             self._show_step_one()
-            if selected is None:
-                self.root.after(2000, self._start_card_check)
             return
 
         assert card is not None and oot is not None
@@ -865,42 +776,36 @@ class PackHelperWindow:
         if dropped_paths:
             self._add_packs(dropped_paths)
 
-    def _auto_select_card(self) -> None:
-        """Compatibility name for callers that used the old startup hook."""
-        self._start_card_check()
-
     def _set_card(self, selected: Path, show_errors: bool = True) -> None:
         """Start validation without blocking Tk; ``show_errors`` is retained for callers."""
         del show_errors
-        self._start_card_check(Path(selected))
-
-    def _look_again(self) -> None:
-        self._start_card_check()
+        self._start_card_validation(Path(selected))
 
     def _choose_sd(self) -> None:
-        selected = self.filedialog.askdirectory(title="Choose the SD card folder (the folder containing wiiu)")
+        selected = self.filedialog.askdirectory(title="Choose your SD card...")
         if selected:
-            self._start_card_check(Path(selected))
+            self._set_card(Path(selected))
         else:
-            self.status.set("No folder was chosen. Put the SD card in this computer or try again.")
+            self.status.set("Choose your SD card folder to continue.")
             self._show_step_one()
 
     def _show_step_one(self) -> None:
         self.step = 1
         self._clear()
-        self._header(1, "Find your SD card")
+        self._header(1, "Choose your SD card")
         self.ttk.Label(
             self.root,
-            text="Put your Wii U SD card in this computer. I will look for it every 2 seconds and use the SoH files already on it.",
+            text=(
+                "Choose the SD card's top folder (for example, E:\\), or choose a folder that contains "
+                "wiiu/apps/soh923. The folder must contain oot.o2r too. Using USB Partition instead of an SD "
+                "card? Choose the FAT32 part of the USB drive. If Windows asks to format a drive, click Cancel."
+            ),
             wraplength=540,
         ).pack(anchor="w", padx=24, pady=8)
         self.ttk.Label(self.root, textvariable=self.status, wraplength=540).pack(anchor="w", padx=24, pady=12)
         buttons = self.ttk.Frame(self.root)
         buttons.pack(side="bottom", fill="x", padx=24, pady=22)
-        self.ttk.Button(buttons, text="Look again", command=self._look_again).pack(side="left")
-        self.ttk.Button(buttons, text="Choose the SD card folder myself...", command=self._choose_sd).pack(
-            side="left", padx=8
-        )
+        self.ttk.Button(buttons, text="Choose your SD card...", command=self._choose_sd).pack(side="left")
         self.ttk.Button(buttons, text="Next", command=self._show_step_two, state="normal" if self.card else "disabled").pack(
             side="right"
         )
@@ -933,6 +838,13 @@ class PackHelperWindow:
             text="Choose downloaded .zip, .otr, or .o2r files. The helper will check them fully after you press Start.",
             wraplength=540,
         ).pack(anchor="w", padx=24, pady=8)
+        self.ttk.Label(self.root, text="No packs yet? Download them from the pack's own page:", wraplength=540).pack(
+            anchor="w", padx=24
+        )
+        for title, url in PACK_DOWNLOADS:
+            link = self.tk.Label(self.root, text=title, fg="#1a5fb4", cursor="hand2", font=("TkDefaultFont", 10, "underline"))
+            link.pack(anchor="w", padx=36, pady=2)
+            link.bind("<Button-1>", lambda _event, url=url: self._open_link(url))
         listbox = self.tk.Listbox(self.root, height=8)
         listbox.pack(fill="both", expand=True, padx=24, pady=8)
         for path in self.pack_paths:
@@ -948,6 +860,14 @@ class PackHelperWindow:
             command=self._show_step_three,
             state="normal" if self.pack_paths else "disabled",
         ).pack(side="right")
+
+    def _open_link(self, url: str) -> None:
+        import webbrowser
+
+        try:
+            webbrowser.open(url)
+        except Exception:
+            self.messagebox.showinfo("SoH Wii U Pack Helper", f"Open this page in your web browser:\n{url}")
 
     def _show_step_three(self) -> None:
         if not self.card or not self.oot:
@@ -1008,7 +928,7 @@ class PackHelperWindow:
     def _worker(self) -> None:
         try:
             result = run_install(
-                self.card.root if self.card else None,
+                self.card.root,
                 self.pack_paths,
                 oot_path=self.oot,
                 progress=self._update_progress,
