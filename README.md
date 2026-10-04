@@ -11,15 +11,13 @@
 No game data is included. You need your own legally dumped Ocarina of Time ROM.
 
 1. Make `oot.o2r` once on a PC with desktop Ship of Harkinian **9.2.3** ([upstream releases](https://github.com/HarbourMasters/Shipwright/releases)) and your ROM. It has to be 9.2.3.
-2. Copy the files to your SD card:
-   ```
-   sd:/wiiu/apps/soh.wuhb
-   sd:/wiiu/apps/soh923/soh.o2r
-   sd:/wiiu/apps/soh923/oot.o2r
-   ```
-3. Start **Ship of Harkinian** from the Wii U Menu.
+2. Extract the release zip to the root of your SD card. It already has the right folders (`wiiu/apps/soh.wuhb` and `wiiu/apps/soh923/`).
+3. Copy your `oot.o2r` into `sd:/wiiu/apps/soh923/`.
+4. Start **Ship of Harkinian** from the Wii U Menu.
 
-Texture packs go in `sd:/wiiu/apps/soh923/mods/`. The full Wii U guide (texture packs, settings, troubleshooting) is in [`soh/wiiu/README.md`](soh/wiiu/README.md), and the same file is in the release zip.
+**Texture packs:** download the pack from its author's page, then run the **SoH Wii U Pack Helper** from the release page on your PC. It finds the SD card, converts the packs you downloaded so they run well on the Wii U, keeps any old packs in a backup folder, and puts the result in `sd:/wiiu/apps/soh923/mods/`. Packs copied into `mods/` by hand also work, just slower.
+
+The full Wii U guide (packs, settings, troubleshooting) is in [`soh/wiiu/README.md`](soh/wiiu/README.md), and the same file is in the release zip.
 
 The port builds on [GaryOderNichts](https://github.com/GaryOderNichts)' original Wii U port. The engine is HarbourMasters' work: if you enjoy it, support them.
 
