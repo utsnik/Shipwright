@@ -473,8 +473,9 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                               "Make oot.o2r once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
                               "Ocarina of Time ROM. Put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
                               "See README.md in the release zip for instructions.\n\n"
-                              "Press OK to exit.",
-                              "OK", "", requestWiiUExit);
+                              "Hold the POWER button to turn off your Wii U, copy oot.o2r into "
+                              "sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.",
+                              "Hold POWER to turn off", "", []() {});
     }
     // Upstream called OSFatal() with no argument (it takes a message, so this never
     // compiled). Dropped rather than fixed: it would red-screen the console before the
@@ -543,13 +544,15 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                               "Make oot.o2r once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
                               "Ocarina of Time ROM.\n\n"
                               "See README.md in the release zip for instructions.\n\n"
-                              "Press OK to exit.";
+                              "Hold the POWER button to turn off your Wii U, copy soh.o2r into "
+                              "sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.";
                     } else {
                         msg = "Your soh.o2r was made with a different Ship of Harkinian version.\n\n"
                               "Use the soh.o2r from the same Ship of Harkinian 9.2.3 release as oot.o2r, and put "
                               "both in sd:/wiiu/apps/soh923/.\n\n"
                               "See README.md in the release zip for instructions.\n\n"
-                              "Press OK to exit.";
+                              "Hold the POWER button to turn off your Wii U, copy the matching soh.o2r into "
+                              "sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.";
                     }
 #else
                     msg =
@@ -558,7 +561,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     std::string title =
                         !std::filesystem::exists(portArchivePath) ? "Missing soh.o2r" : "soh.o2r is outdated";
 #if defined(__WIIU__)
-                    SohGui::RegisterPopup(title, msg, "OK", "", requestWiiUExit);
+                    SohGui::RegisterPopup(title, msg, "Hold POWER to turn off", "", []() {});
 #else
                     SohGui::RegisterPopup(title, msg, "OK", "", [&]() { exit(1); });
 #endif
@@ -704,8 +707,9 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                                 "your own Ocarina of Time ROM, then put oot.o2r and soh.o2r in "
                                 "sd:/wiiu/apps/soh923/.\n\n"
                                 "An outdated oot.o2r was made with a different SoH version. See README.md in the "
-                                "release zip for instructions.\n\nPress OK to exit.",
-                                "OK", "", requestWiiUExit);
+                                "release zip for instructions.\n\nHold the POWER button to turn off your Wii U, "
+                                "copy oot.o2r into sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.",
+                                "Hold POWER to turn off", "", []() {});
 #else
                             SohGui::RegisterPopup(
                                 "No O2R Files", "No O2R files found. Generate one now?", "Yes", "No",
@@ -796,8 +800,9 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                         "Missing oot.o2r. Make it once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
                         "Ocarina of Time ROM, then put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
                         "An outdated oot.o2r was made with a different SoH version. See README.md in the release zip "
-                        "for instructions.\n\nPress OK to exit.",
-                        "OK", "", requestWiiUExit);
+                        "for instructions.\n\nHold the POWER button to turn off your Wii U, copy oot.o2r into "
+                        "sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.",
+                        "Hold POWER to turn off", "", []() {});
 #else
                     SohGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
@@ -809,6 +814,15 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                 }
 #if defined(__WIIU__)
                 if (shouldRegen) {
+                    SohGui::RegisterPopup(
+                        "Outdated ROM Archives",
+                        "Your oot.o2r was made with a different Ship of Harkinian version.\n\n"
+                        "Make oot.o2r once on a PC with desktop Ship of Harkinian 9.2.3 from your own "
+                        "Ocarina of Time ROM. Put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
+                        "See README.md in the release zip for instructions.\n\n"
+                        "Hold the POWER button to turn off your Wii U, copy oot.o2r into "
+                        "sd:/wiiu/apps/soh923/, then start Ship of Harkinian again.",
+                        "Hold POWER to turn off", "", []() {});
                     continue;
                 }
 #endif

@@ -111,13 +111,14 @@ still work, but run slower. The manual instructions above remain an alternative.
 
 ## Troubleshooting
 
-- **"Outdated ROM Archives"**: your `oot.o2r` was made by a different SoH version. Make it again
-  with SoH 9.2.3 (step 1).
+- **"Outdated ROM Archives"**: hold the **POWER** button to turn off your Wii U, make `oot.o2r` again
+  with SoH 9.2.3 (step 1), copy it into `sd:/wiiu/apps/soh923/`, then start Ship of Harkinian again.
 - **"No O2R files found. Generate one now?"**: the app cannot find `oot.o2r`. The Wii U popup
-  explains that it must be generated on a PC; press **OK** to exit, then check that `soh.o2r` and
-  `oot.o2r` are both in `sd:/wiiu/apps/soh923/`, spelled exactly like that.
-- **The screen freezes and the console stops responding**: hold the power button to turn it off,
-  then start it again. Please report what you were doing when it happened.
+  explains that it must be generated on a PC; hold the **POWER** button to turn off your Wii U, then
+  copy `oot.o2r` into `sd:/wiiu/apps/soh923/` and start Ship of Harkinian again. Make sure `soh.o2r`
+  is there too, spelled exactly like that.
+- **Missing or outdated `soh.o2r`**: hold the **POWER** button to turn off your Wii U, copy the matching
+  `soh.o2r` into `sd:/wiiu/apps/soh923/`, then start Ship of Harkinian again.
 - **Settings did not stick**: change them in the in-game menu. Don't edit `shipofharkinian.json`
   while the game is running, because the game rewrites it when it closes.
 - Always leave with **HOME -> Close** before taking the SD card out.
