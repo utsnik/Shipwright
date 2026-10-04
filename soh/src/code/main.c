@@ -60,7 +60,13 @@ int SDL_main(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
 #endif
     GameConsole_Init();
+#ifdef __WIIU__
+    if (!InitOTR(argc, argv)) {
+        return 0;
+    }
+#else
     InitOTR(argc, argv);
+#endif
     // TODO: Was moved to below InitOTR because it requires window to be setup. But will be late to catch crashes.
     CrashHandlerRegisterCallback(CrashHandler_PrintSohData);
     BootCommands_Init();

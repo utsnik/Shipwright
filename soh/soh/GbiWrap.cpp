@@ -3,7 +3,11 @@
 // OTRTODO - this is awful
 
 extern "C" {
+#ifdef __WIIU__
+int InitOTR(int argc, char* argv[]);
+#else
 void InitOTR(int argc, char* argv[]);
+#endif
 void Graph_ProcessFrame(void (*run_one_game_iter)(void));
 void Graph_StartFrame();
 void Graph_ProcessGfxCommands(Gfx* commands);

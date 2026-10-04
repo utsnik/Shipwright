@@ -143,7 +143,11 @@ class OTRGlobals {
 #endif
 
 #ifndef __cplusplus
+#ifdef __WIIU__
+int InitOTR(int argc, char* argv[]);
+#else
 void InitOTR(int argc, char* argv[]);
+#endif
 void DeinitOTR(void);
 void VanillaItemTable_Init();
 void OTRAudio_Init();

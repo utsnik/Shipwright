@@ -417,10 +417,19 @@ static ImVec4 SafeThemeColor(UIWidgets::Colors key) {
 
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
     bool extractDone = false;
+#if defined(__WIIU__)
+    bool wiiuExitRequested = false;
+#endif
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
     WindowsSteps windowsStep = WS_TEMP;
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
     auto gui = wnd->GetGui();
+#if defined(__WIIU__)
+    auto requestWiiUExit = [&]() {
+        wiiuExitRequested = true;
+        wnd->Close();
+    };
+#endif
 
     OTRVersion vanillaVersion = DetectOTRVersion("oot.o2r", false);
     OTRVersion mqVersion = DetectOTRVersion("oot-mq.o2r", true);
@@ -465,7 +474,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                               "Ocarina of Time ROM. Put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
                               "See README.md in the release zip for instructions.\n\n"
                               "Press OK to exit.",
-                              "OK", "", [&]() { exit(1); });
+                              "OK", "", requestWiiUExit);
     }
     // Upstream called OSFatal() with no argument (it takes a message, so this never
     // compiled). Dropped rather than fixed: it would red-screen the console before the
@@ -507,6 +516,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
         if (SohGui::PopupsQueued() > 0 || extractionTask.has_value()) {
             goto render;
         }
+#if defined(__WIIU__)
+        if (wiiuExitRequested) {
+            goto render;
+        }
+#endif
         switch (extractStep) {
             case ES_PORT_ARCHIVE: {
                 if (sohArchiveVersionMatch) {
@@ -544,7 +558,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                     std::string title =
                         !std::filesystem::exists(portArchivePath) ? "Missing soh.o2r" : "soh.o2r is outdated";
 #if defined(__WIIU__)
-                    SohGui::RegisterPopup(title, msg, "OK", "", [&]() { exit(1); });
+                    SohGui::RegisterPopup(title, msg, "OK", "", requestWiiUExit);
 #else
                     SohGui::RegisterPopup(title, msg, "OK", "", [&]() { exit(1); });
 #endif
@@ -691,7 +705,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                                 "sd:/wiiu/apps/soh923/.\n\n"
                                 "An outdated oot.o2r was made with a different SoH version. See README.md in the "
                                 "release zip for instructions.\n\nPress OK to exit.",
-                                "OK", "", [&]() { exit(1); });
+                                "OK", "", requestWiiUExit);
 #else
                             SohGui::RegisterPopup(
                                 "No O2R Files", "No O2R files found. Generate one now?", "Yes", "No",
@@ -783,7 +797,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                         "Ocarina of Time ROM, then put oot.o2r and soh.o2r in sd:/wiiu/apps/soh923/.\n\n"
                         "An outdated oot.o2r was made with a different SoH version. See README.md in the release zip "
                         "for instructions.\n\nPress OK to exit.",
-                        "OK", "", [&]() { exit(1); });
+                        "OK", "", requestWiiUExit);
 #else
                     SohGui::RegisterPopup("No ROM Archives",
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
@@ -807,7 +821,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 
     render:
         if (!WindowIsRunning()) {
+#if defined(__WIIU__)
+            break;
+#else
             exit(0);
+#endif
         }
         // Process window events for resize, mouse, keyboard events
         wnd->HandleEvents();
@@ -1569,7 +1587,11 @@ bool VerifyArchiveVersion(OTRVersion version) {
     return version.major != INT16_MAX && version.major != gBuildVersionMajor;
 }
 
+#if defined(__WIIU__)
+extern "C" int InitOTR(int argc, char* argv[]) {
+#else
 extern "C" void InitOTR(int argc, char* argv[]) {
+#endif
 #ifdef __WIIU__
     // MUST be first. WiiU::Init brings up UDP logging AND chdirs to the app directory;
     // until it runs, cwd is the SD root, so every relative archive lookup resolves
@@ -1582,6 +1604,18 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 #endif
     OTRGlobals::Instance = new OTRGlobals();
     OTRGlobals::Instance->RunExtract(argc, argv);
+
+#ifdef __WIIU__
+    if (!WindowIsRunning()) {
+        // RunExtract deliberately waited for ProcUI to release the title. Finish
+        // through the same ownership teardown as the in-game exit path before
+        // returning to main, rather than invoking exit() with GX2 still live.
+        SohGui::Destroy();
+        sohFast3dWindow = nullptr;
+        OTRGlobals::Instance->context = nullptr;
+        return 0;
+    }
+#endif
 
     OTRGlobals::Instance->Initialize();
     CustomMessageManager::Instance = new CustomMessageManager();
@@ -1765,6 +1799,9 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     ShipInit::InitAll();
     Rando::StaticData::InitHashMaps();
     OTRGlobals::Instance->gRandoContext->AddExcludedOptions();
+#ifdef __WIIU__
+    return 1;
+#endif
 }
 
 extern "C" void SaveManager_ThreadPoolWait() {
