@@ -545,8 +545,8 @@ void DrawInventoryTab() {
             PushStyleButton(Colors::DarkGray);
             if (item == ITEM_ROCS_FEATHER) {
                 auto ret = ImGui::ImageButton(
-                    "ROCS_FEATHER",
-                    Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName("ROCS_FEATHER"),
+                    "RG_ROCS_FEATHER",
+                    Ship::Context::GetInstance()->GetWindow()->GetGui()->GetTextureByName("RG_ROCS_FEATHER"),
                     ImVec2(48.0f, 48.0f), ImVec2(0, 0), ImVec2(1, 1));
                 if (ret) {
                     selectedIndex = index;
@@ -1974,6 +1974,6 @@ void SaveEditorWindow::DrawElement() {
 }
 
 void SaveEditorWindow::InitElement() {
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture("ROCS_FEATHER", gRocsFeatherTex,
+    Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture("RG_ROCS_FEATHER", gRocsFeatherTex,
                                                                         ImVec4(1, 1, 1, 1));
 }
