@@ -789,7 +789,15 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                                           "No ROM O2R files detected. Please generate a ROM O2R and relaunch.", "OK",
                                           "", [&]() { exit(0); });
 #endif
+#if defined(__WIIU__)
+                    continue;
+#endif
                 }
+#if defined(__WIIU__)
+                if (shouldRegen) {
+                    continue;
+                }
+#endif
                 extractDone = true;
                 continue;
             }
