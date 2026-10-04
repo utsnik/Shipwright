@@ -67,7 +67,19 @@ its settings (`shipofharkinian.json`) and save files there.
 
 Put the card back, start the Wii U and open **Ship of Harkinian** from the Wii U Menu.
 
-## Texture packs (optional)
+## Texture packs (optional): the Pack Helper
+
+On Windows, download `SoH-WiiU-Pack-Helper.exe` from the
+[release page](https://github.com/utsnik/Shipwright/releases). Put the Wii U SD card in the PC,
+run the helper, pick the downloaded pack zips, press **Start**, and wait for **Done**. Windows
+SmartScreen may say **Windows protected your PC**; click **More info**, then **Run anyway**.
+
+On Linux and macOS, run `python3 -m packhelper` from `soh/wiiu/` in the source checkout.
+
+The helper keeps old packs in a `mods-backup` folder and never deletes anything. Hand-copied packs
+still work, but run slower. To copy packs by hand instead, see the next section.
+
+## Texture packs by hand
 
 Texture packs are `.o2r` or `.otr` files. Put them in:
 
@@ -96,18 +108,6 @@ The Djipi `01 Main Textures` archive may be either `.o2r` (ZIP) or `.otr` (MPQ).
 The script uses the optional `mpyq` package for `.otr` files.
 
 Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to undo.
-
-## Texture packs: the Pack Helper
-
-On Windows, download `SoH-WiiU-Pack-Helper.exe` from the
-[release page](https://github.com/utsnik/Shipwright/releases). Put the Wii U SD card in the PC,
-run the helper, pick the downloaded pack zips, press **Start**, and wait for **Done**. Windows
-SmartScreen may say **Windows protected your PC**; click **More info**, then **Run anyway**.
-
-On Linux and macOS, run `python3 -m packhelper` from `soh/wiiu/` in the source checkout.
-
-The helper keeps old packs in a `mods-backup` folder and never deletes anything. Hand-copied packs
-still work, but run slower. The manual instructions above remain an alternative.
 
 ## Troubleshooting
 
