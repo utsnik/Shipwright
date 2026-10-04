@@ -3,7 +3,7 @@
 #include <vector>
 #include <string>
 #include <cstdio>
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
 #include <spdlog/spdlog.h>
 #endif
 #include <libultraship/bridge.h>
@@ -26,7 +26,7 @@ std::vector<SohModal> modals;
 
 bool closePopup = false;
 
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
 bool AutoAcceptPopupEnabled() {
     static const bool enabled = []() {
         FILE* marker = fopen("autoaccept-popup.txt", "r");
@@ -61,7 +61,7 @@ void SohModalWindow::DrawElement() {
             ImGui::CloseCurrentPopup();
             modals.erase(modals.begin());
             closePopup = false;
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
             autoAcceptTitle.clear();
 #endif
         }
@@ -70,7 +70,7 @@ void SohModalWindow::DrawElement() {
                                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                                        ImGuiWindowFlags_NoSavedSettings)) {
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
             if (autoAcceptTitle != curModal.title_) {
                 autoAcceptTitle = curModal.title_;
                 autoAcceptStartedAt = ImGui::GetTime();
@@ -85,7 +85,7 @@ void SohModalWindow::DrawElement() {
                 ImGui::CloseCurrentPopup();
                 modals.erase(modals.begin());
                 accepted = true;
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
                 autoAcceptTitle.clear();
 #endif
             };
@@ -102,7 +102,7 @@ void SohModalWindow::DrawElement() {
                 }
                 UIWidgets::PopStyleButton();
             }
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
             if (!accepted && AutoAcceptPopupEnabled() && ImGui::GetTime() - autoAcceptStartedAt >= 5.0) {
                 SPDLOG_INFO("AUTOACCEPT popup {}", curModal.title_);
                 acceptPopup(curModal.button1callback_);
@@ -111,7 +111,7 @@ void SohModalWindow::DrawElement() {
             ImGui::EndPopup();
         }
     } else {
-#if defined(__WIIU__) && WIIU_DIAGNOSTICS
+#if defined(__WIIU__) && (WIIU_DIAGNOSTICS || WIIU_AUTOACCEPT_TEST)
         autoAcceptTitle.clear();
 #endif
     }
