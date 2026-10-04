@@ -97,6 +97,18 @@ The script uses the optional `mpyq` package for `.otr` files.
 
 Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to undo.
 
+## Texture packs: the Pack Helper
+
+On Windows, download `SoH-WiiU-Pack-Helper.exe` from the
+[release page](https://github.com/utsnik/Shipwright/releases). Put the Wii U SD card in the PC,
+run the helper, pick the downloaded pack zips, press **Start**, and wait for **Done**. Windows
+SmartScreen may say **Windows protected your PC**; click **More info**, then **Run anyway**.
+
+On Linux and macOS, run `python3 -m packhelper` from `soh/wiiu/` in the source checkout.
+
+The helper keeps old packs in a `mods-backup` folder and never deletes anything. Hand-copied packs
+still work, but run slower. The manual instructions above remain an alternative.
+
 ## Troubleshooting
 
 - **"Outdated ROM Archives"**: your `oot.o2r` was made by a different SoH version. Make it again
