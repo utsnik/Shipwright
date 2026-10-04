@@ -82,7 +82,8 @@ or you lose the games installed on it. You can also pick a folder on your PC tha
 
 On Linux and macOS, run `python3 -m packhelper` from `soh/wiiu/` in the source checkout.
 
-The helper keeps old packs in a `mods-backup` folder and never deletes anything. Hand-copied packs
+Your other packs stay in `mods/`: the helper only replaces older versions of the packs you convert, keeps those in a
+`mods-backup` folder, and never deletes anything. You can run it again later for just one new pack. Hand-copied packs
 still work, but run slower. To copy packs by hand instead, see the next section.
 
 ## Texture packs by hand

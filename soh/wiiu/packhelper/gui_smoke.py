@@ -65,7 +65,8 @@ def _synthetic_files(base: Path) -> tuple[Path, Path, list[Path], Path]:
 
     old_mods = game / "mods"
     old_mods.mkdir()
-    (old_mods / "old-pack.txt").write_text("kept by the smoke test\n", encoding="utf-8")
+    (old_mods / "Djipi's 3DE - Old Textures.o2r").write_bytes(b"old Djipi pack")
+    (old_mods / "Unrelated Pack.o2r").write_bytes(b"unrelated pack")
     backup = game / "mods-backup-20261004-120000"
 
     skilar = base / "Skilar-Art-Plus-Link.o2r"
@@ -330,6 +331,10 @@ def run() -> dict[str, object]:
                 raise RuntimeError("smoke-test conversion was not released")
             if progress:
                 progress(88, "Copying the finished packs to the SD card...")
+            backup.mkdir()
+            (game / "mods" / "Djipi's 3DE - Old Textures.o2r").rename(
+                backup / "Djipi's 3DE - Old Textures.o2r"
+            )
             return packhelper.InstallResult(
                 packhelper.SdCard(Path(sd_root), game),
                 backup,
@@ -401,6 +406,9 @@ def run() -> dict[str, object]:
             assert "5 to 10 minutes" in ready_text
             assert "keep the sd card" in ready_text.casefold()
             assert "GB free on this computer and on the SD card" in ready_text
+            assert "Skilar's Art Plus Link will be added." in ready_text, ready_text
+            assert "Djipi's 3DS Experience will be updated." in ready_text, ready_text
+            assert "Your 1 other pack stays as it is." in ready_text, ready_text
 
             def reject_space(*_args: object, **_kwargs: object) -> None:
                 raise packhelper.OutOfSpace()
@@ -439,7 +447,12 @@ def run() -> dict[str, object]:
             )
             done_words = _all_text(root) + "\n" + "\n".join(message for _kind, message in dialogs.calls)
             assert "Done" in done_words
-            assert backup.name in done_words, "completion did not name the old-packs backup folder"
+            assert backup.name in done_words, "completion did not name the replaced-packs backup folder"
+            assert "old packs were moved" not in done_words.casefold(), done_words
+            assert (game / "mods" / "Unrelated Pack.o2r").read_bytes() == b"unrelated pack"
+            assert not (game / "mods" / "Djipi's 3DE - Old Textures.o2r").exists()
+            assert (backup / "Djipi's 3DE - Old Textures.o2r").read_bytes() == b"old Djipi pack"
+            assert {path.name for path in backup.iterdir()} == {"Djipi's 3DE - Old Textures.o2r"}
             button_texts = [
                 _widget_text(widget, root)
                 for widget in _walk(root)

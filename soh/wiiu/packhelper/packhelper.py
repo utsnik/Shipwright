@@ -458,7 +458,7 @@ def backup_existing_mods(
     game_dir: Path,
     now: _datetime.datetime | None = None,
 ) -> Path | None:
-    """Rename, never remove, the current mods directory."""
+    """Legacy helper that preserves a complete mods directory under a timestamp."""
     mods = game_dir / "mods"
     if not mods.exists() and not mods.is_symlink():
         return None
@@ -490,7 +490,11 @@ def backup_existing_mods(
 
 
 def remove_nonpack_mods(game_dir: Path) -> None:
-    """Remove only the release placeholder and empty directories."""
+    """Remove only the release placeholder and empty directories.
+
+    New installs stage a merged directory instead of using this whole-folder
+    cleanup path; it remains for callers that explicitly need the old helper.
+    """
     mods = game_dir / "mods"
     if not mods.exists() and not mods.is_symlink():
         return
@@ -540,6 +544,123 @@ def copy_directory_with_progress(
     _report(progress, 100, "Finished copying the new packs.")
 
 
+def _copy_directory_contents_with_progress(
+    source: Path,
+    destination: Path,
+    progress: Progress | None,
+    cancel_event: threading.Event | Callable[[], bool] | None,
+    *,
+    start_percent: int,
+    end_percent: int,
+    message: str,
+    skip: Iterable[Path] = (),
+) -> None:
+    """Copy files into an already-created stage directory (except those in *skip*).
+
+    The destination is deliberately a sibling staging directory.  The live
+    ``mods`` path is not touched until the complete merged tree is ready.
+    """
+    if not source.is_dir() or source.is_symlink():
+        return
+    skipped = {os.path.normcase(os.path.abspath(str(path))) for path in skip}
+    files = [
+        path
+        for path in source.rglob("*")
+        if path.is_file() and os.path.normcase(os.path.abspath(str(path))) not in skipped
+    ]
+    total = sum(path.stat().st_size for path in files)
+    copied = 0
+    for source_file in files:
+        _check_cancel(cancel_event)
+        target = destination / source_file.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source_file.open("rb") as source_stream, target.open("wb") as target_stream:
+            while True:
+                _check_cancel(cancel_event)
+                chunk = source_stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                target_stream.write(chunk)
+                copied += len(chunk)
+                percent = start_percent if total == 0 else start_percent + int(copied * (end_percent - start_percent) / total)
+                _report(progress, percent, message)
+        shutil.copystat(source_file, target, follow_symlinks=True)
+    _report(progress, end_percent, message)
+
+
+def _pack_family(name: str) -> str | None:
+    """Return the leading family key used to replace related converted packs."""
+    stem = Path(name).stem.casefold()
+    if stem == "zz-fix-blank-skyboxes":
+        return "djipi"
+    if stem.startswith("djipi's 3de - "):
+        return "djipi"
+    if stem.startswith("art plus - "):
+        return "art-plus"
+    prefix, separator, _rest = stem.partition(" - ")
+    return f"{prefix}{separator}" if separator else None
+
+
+def _pack_family_for_label(label: str) -> str | None:
+    """Map the friendly step-2 label to the family used by generated names."""
+    lowered = label.casefold()
+    if "djipi" in lowered or "3ds experience" in lowered or "3de" in lowered:
+        return "djipi"
+    if "skilar" in lowered or "art plus" in lowered or "artplus" in lowered:
+        return "art-plus"
+    return _pack_family(label)
+
+
+def _pack_files(mods: Path) -> list[Path]:
+    if not mods.is_dir() or mods.is_symlink():
+        return []
+    return [path for path in mods.iterdir() if path.is_file() and path.suffix.casefold() in PACK_SUFFIXES]
+
+
+def _files_replaced_by_run(mods: Path, produced_names: set[str]) -> list[Path]:
+    """Find existing pack files that the converted output supersedes."""
+    if not mods.is_dir() or mods.is_symlink():
+        return []
+    produced_keys = {name.casefold() for name in produced_names}
+    families = {_pack_family(name) for name in produced_names}
+    families.discard(None)
+    replaced: list[Path] = []
+    for path in mods.rglob("*"):
+        if not path.is_file() or path.suffix.casefold() not in PACK_SUFFIXES:
+            continue
+        if path.name.casefold() in produced_keys or _pack_family(path.name) in families:
+            replaced.append(path)
+    return replaced
+
+
+def _unique_path(parent: Path, prefix: str) -> Path:
+    candidate = parent / prefix
+    suffix = 2
+    while candidate.exists() or candidate.is_symlink():
+        candidate = parent / f"{prefix}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _remove_path(path: Path) -> None:
+    if not path.exists() and not path.is_symlink():
+        return
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _remove_empty_parent_dirs(path: Path, stop: Path) -> None:
+    parent = path.parent
+    while parent != stop and parent != parent.parent:
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+        parent = parent.parent
+
+
 def run_install(
     sd_root: Path,
     pack_paths: Iterable[Path],
@@ -572,21 +693,100 @@ def run_install(
             _convert_to_temp(oot, selections, converted, bounded_jobs_count, progress, cancel_event)
             _check_cancel(cancel_event)
             converted_size = sum(path.stat().st_size for path in converted.rglob("*") if path.is_file())
+            mods = card.game_dir / "mods"
+            mods_source = mods.resolve() if mods.is_symlink() else mods
+            produced_names = {
+                path.name
+                for path in converted.iterdir()
+                if path.is_file() and path.suffix.casefold() in PACK_SUFFIXES
+            }
+            replaced_files = _files_replaced_by_run(mods_source, produced_names)
+            # The staged folder holds the converted packs plus a copy of every pack that stays (the live mods/ is
+            # only swapped once that copy is complete), so both must fit on the card at the same time.
+            replaced_keys = {os.path.normcase(os.path.abspath(str(path))) for path in replaced_files}
+            kept_size = sum(
+                path.stat().st_size
+                for path in (mods_source.rglob("*") if mods_source.is_dir() else ())
+                if path.is_file() and os.path.normcase(os.path.abspath(str(path))) not in replaced_keys
+            )
             try:
-                if int(getattr(disk_usage(card.root), "free")) < converted_size:
+                if int(getattr(disk_usage(card.root), "free")) < converted_size + kept_size:
                     raise OutOfSpace()
             except (OSError, TypeError, ValueError, AttributeError) as error:
                 raise OutOfSpace() from error
-            backup = backup_existing_mods(card.game_dir, now=now)
-            if backup is None:
-                remove_nonpack_mods(card.game_dir)
-            stage = card.game_dir / f".mods-install-{(now or _datetime.datetime.now()).strftime('%Y%m%d-%H%M%S-%f')}"
-            while stage.exists() or stage.is_symlink():
-                stage = stage.with_name(stage.name + "-2")
-            copy_directory_with_progress(converted, stage, progress, cancel_event)
-            _check_cancel(cancel_event)
-            stage.rename(card.game_dir / "mods")
-            return InstallResult(card, backup, card.game_dir / "mods", tuple(selection.label for selection in selections))
+            stamp = (now or _datetime.datetime.now()).strftime("%Y%m%d-%H%M%S")
+            stage = _unique_path(card.game_dir, f".mods-install-{stamp}")
+            stage.mkdir()
+            installed = False
+            backup: Path | None = None
+            previous = _unique_path(card.game_dir, f".mods-previous-{stamp}")
+            try:
+                _copy_directory_contents_with_progress(
+                    mods_source,
+                    stage,
+                    progress,
+                    cancel_event,
+                    start_percent=84,
+                    end_percent=91,
+                    message="Preparing the existing packs to stay in place...",
+                    skip=replaced_files,
+                )
+                for old_file in replaced_files:
+                    relative = old_file.relative_to(mods_source)
+                    _remove_path(stage / relative)
+                _copy_directory_contents_with_progress(
+                    converted,
+                    stage,
+                    progress,
+                    cancel_event,
+                    start_percent=91,
+                    end_percent=99,
+                    message="Copying the converted packs into the staged mods folder...",
+                )
+                placeholder = stage / MODS_PLACEHOLDER
+                if placeholder.is_file() and not placeholder.is_symlink():
+                    placeholder.unlink()
+                pack_names = sorted(
+                    (
+                        path.name
+                        for path in stage.iterdir()
+                        if path.is_file() and path.suffix.casefold() in PACK_SUFFIXES
+                    ),
+                    key=profile_sort_key,
+                )
+                write_load_order(stage, pack_names)
+                _check_cancel(cancel_event)
+
+                if replaced_files:
+                    backup = _unique_path(card.game_dir, f"mods-backup-{stamp}")
+                    backup.mkdir()
+                if mods.exists() or mods.is_symlink():
+                    mods.rename(previous)
+                try:
+                    stage.rename(mods)
+                except BaseException:
+                    if previous.exists() or previous.is_symlink():
+                        previous.rename(mods)
+                    raise
+                installed = True
+
+                if backup is not None:
+                    for old_file in replaced_files:
+                        relative = old_file.relative_to(mods_source)
+                        source = previous / relative
+                        target = backup / relative
+                        if source.exists() or source.is_symlink():
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.move(str(source), str(target))
+                            _remove_empty_parent_dirs(source, previous)
+                _remove_path(previous)
+                _report(progress, 100, "Finished merging the packs into mods/.")
+                return InstallResult(card, backup, mods, tuple(selection.label for selection in selections))
+            finally:
+                if not installed:
+                    _remove_path(stage)
+                    if backup is not None and backup.exists() and not any(backup.iterdir()):
+                        backup.rmdir()
     except MemoryError:
         raise
     except Cancelled:
@@ -614,9 +814,9 @@ def user_message(error: BaseException) -> str:
 def installation_done_message(result: InstallResult) -> str:
     """Describe the completed install in terms a first-time user can use."""
     if result.backup is None:
-        backup_note = "There were no old packs to move."
+        backup_note = "No existing pack files were replaced; your other packs stayed in mods/."
     else:
-        backup_note = f"Your old packs were moved to the {result.backup.name} folder."
+        backup_note = f"Replaced pack files were moved to {result.backup.name}; your other packs stayed in mods/."
     return f"{DONE_MESSAGE}. {backup_note}"
 
 
@@ -633,19 +833,35 @@ def run_selftest() -> int:
         game = root / "wiiu" / "apps" / "soh923"
         game.mkdir(parents=True)
         _selftest_archive(game / "oot.o2r")
-        pack = root / "Skilar-Art-Plus-Link.o2r"
+        pack = root / "Art Plus - New.o2r"
         _selftest_archive(pack, version=None)
         with zipfile.ZipFile(pack, "a") as archive:
             archive.writestr("alt/synthetic", b"synthetic test data")
         old_mods = game / "mods"
         old_mods.mkdir()
         (old_mods / "keep-me.txt").write_text("not deleted")
+        (old_mods / "Art Plus - Old.o2r").write_bytes(b"old family pack")
+        (old_mods / "unrelated.o2r").write_bytes(b"unrelated pack")
         result = run_install(root, [pack], jobs=1)
         assert result.output.is_dir()
-        with zipfile.ZipFile(result.output / "Skilar-Art-Plus-Link.o2r") as archive:
+        with zipfile.ZipFile(result.output / "Art Plus - New.o2r") as archive:
             assert archive.read("alt/synthetic") == b"synthetic test data"
-        assert result.backup is not None and (result.backup / "keep-me.txt").read_text() == "not deleted"
+        assert result.backup is not None
+        assert (result.backup / "Art Plus - Old.o2r").read_bytes() == b"old family pack"
+        assert (result.output / "keep-me.txt").read_text() == "not deleted"
+        assert (result.output / "unrelated.o2r").read_bytes() == b"unrelated pack"
+        assert not (result.output / "Art Plus - Old.o2r").exists()
         assert friendly_pack_name(pack) == "Skilar's Art Plus Link"
+
+        other_pack = root / "Other Pack.o2r"
+        _selftest_archive(other_pack, version=None)
+        second = run_install(root, [other_pack], jobs=1)
+        assert second.backup is None
+        assert (second.output / "Art Plus - New.o2r").is_file()
+        assert (second.output / "Other Pack.o2r").is_file()
+        assert (second.output / "unrelated.o2r").read_bytes() == b"unrelated pack"
+        assert "Art Plus - New.o2r" in (second.output / "LOAD_ORDER.txt").read_text()
+        assert "Other Pack.o2r" in (second.output / "LOAD_ORDER.txt").read_text()
     print("Self-test passed.")
     return 0
 
@@ -869,6 +1085,37 @@ class PackHelperWindow:
         except Exception:
             self.messagebox.showinfo("SoH Wii U Pack Helper", f"Open this page in your web browser:\n{url}")
 
+    def _change_summary(self) -> str:
+        """Describe the merge in plain words before the user presses Start."""
+        assert self.card is not None
+        mods = self.card.game_dir / "mods"
+        existing = _pack_files(mods)
+        produced_names = {path.name.casefold() for path in self.pack_paths}
+        families = {
+            _pack_family_for_label(self.pack_labels.get(self._pack_key(path), path.name))
+            for path in self.pack_paths
+        }
+        families.discard(None)
+        replaced = {
+            path.name
+            for path in existing
+            if path.name.casefold() in produced_names or _pack_family(path.name) in families
+        }
+        labels = [self.pack_labels.get(self._pack_key(path), path.name) for path in self.pack_paths]
+        changes: list[str] = []
+        for path, label in zip(self.pack_paths, labels):
+            family = _pack_family_for_label(label)
+            matching = any(
+                existing_path.name.casefold() == path.name.casefold() or _pack_family(existing_path.name) == family
+                for existing_path in existing
+            )
+            changes.append(f"{label} will be {'updated' if matching else 'added'}.")
+        change = " ".join(changes)
+        other_count = max(0, len(existing) - len(replaced))
+        if other_count == 1:
+            return f"{change} Your 1 other pack stays as it is."
+        return f"{change} Your {other_count} other packs stay as they are."
+
     def _show_step_three(self) -> None:
         if not self.card or not self.oot:
             self._show_step_one()
@@ -886,10 +1133,16 @@ class PackHelperWindow:
             text=(
                 "This usually takes about 5 to 10 minutes. Keep the SD card in this computer until the helper says Done. "
                 f"It needs about {required / (1024 ** 3):.1f} GB free on this computer and on the SD card, "
-                "and will keep any old packs in a dated backup folder."
+                "and will merge the result into mods/. Matching old pack files go to a dated backup folder; other packs stay in place."
             ),
             wraplength=540,
         ).pack(anchor="w", padx=24, pady=10)
+        self.ttk.Label(
+            self.root,
+            text=self._change_summary(),
+            wraplength=540,
+            font=("TkDefaultFont", 11, "bold"),
+        ).pack(anchor="w", padx=24, pady=(0, 8))
         self.progress = self.ttk.Progressbar(self.root, variable=self.progress_value, maximum=100)
         self.progress.pack(fill="x", padx=24, pady=(22, 4))
         self.ttk.Label(self.root, textvariable=self.progress_text, wraplength=540).pack(anchor="w", padx=24, pady=4)
