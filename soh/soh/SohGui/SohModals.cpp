@@ -2,6 +2,10 @@
 #include <imgui.h>
 #include <vector>
 #include <string>
+#include <cstdio>
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+#include <spdlog/spdlog.h>
+#endif
 #include <libultraship/bridge.h>
 #include <libultraship/libultraship.h>
 #include "UIWidgets.hpp"
@@ -22,6 +26,22 @@ std::vector<SohModal> modals;
 
 bool closePopup = false;
 
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+bool AutoAcceptPopupEnabled() {
+    static const bool enabled = []() {
+        FILE* marker = fopen("autoaccept-popup.txt", "r");
+        if (marker != nullptr) {
+            fclose(marker);
+            return true;
+        }
+        return false;
+    }();
+    return enabled;
+}
+std::string autoAcceptTitle;
+double autoAcceptStartedAt = 0.0;
+#endif
+
 void SohModalWindow::Draw() {
     if (!IsVisible()) {
         return;
@@ -41,36 +61,59 @@ void SohModalWindow::DrawElement() {
             ImGui::CloseCurrentPopup();
             modals.erase(modals.begin());
             closePopup = false;
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+            autoAcceptTitle.clear();
+#endif
         }
         ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
         if (ImGui::BeginPopupModal(curModal.title_.c_str(), NULL,
                                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize |
                                        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
                                        ImGuiWindowFlags_NoSavedSettings)) {
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+            if (autoAcceptTitle != curModal.title_) {
+                autoAcceptTitle = curModal.title_;
+                autoAcceptStartedAt = ImGui::GetTime();
+            }
+#endif
             ImGui::Text("%s", curModal.message_.c_str());
-            UIWidgets::PushStyleButton(THEME_COLOR);
-            if (ImGui::Button(curModal.button1_.c_str())) {
-                if (curModal.button1callback_ != nullptr) {
-                    curModal.button1callback_();
+            bool accepted = false;
+            auto acceptPopup = [&](const std::function<void()>& callback) {
+                if (callback != nullptr) {
+                    callback();
                 }
                 ImGui::CloseCurrentPopup();
                 modals.erase(modals.begin());
+                accepted = true;
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+                autoAcceptTitle.clear();
+#endif
+            };
+            UIWidgets::PushStyleButton(THEME_COLOR);
+            if (ImGui::Button(curModal.button1_.c_str())) {
+                acceptPopup(curModal.button1callback_);
             }
             UIWidgets::PopStyleButton();
             if (curModal.button2_ != "") {
                 ImGui::SameLine();
                 UIWidgets::PushStyleButton(THEME_COLOR);
                 if (ImGui::Button(curModal.button2_.c_str())) {
-                    if (curModal.button2callback_ != nullptr) {
-                        curModal.button2callback_();
-                    }
-                    ImGui::CloseCurrentPopup();
-                    modals.erase(modals.begin());
+                    acceptPopup(curModal.button2callback_);
                 }
                 UIWidgets::PopStyleButton();
             }
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+            if (!accepted && AutoAcceptPopupEnabled() && ImGui::GetTime() - autoAcceptStartedAt >= 5.0) {
+                SPDLOG_INFO("AUTOACCEPT popup {}", curModal.title_);
+                acceptPopup(curModal.button1callback_);
+            }
+#endif
             ImGui::EndPopup();
         }
+    } else {
+#if defined(__WIIU__) && defined(WIIU_DIAGNOSTICS)
+        autoAcceptTitle.clear();
+#endif
     }
 }
 
