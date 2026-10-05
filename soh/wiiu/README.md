@@ -77,7 +77,9 @@ downloaded pack zips, press **Start**, and wait for **Done**. Windows SmartScree
 
 Djipi's [GameBanana page](https://gamebanana.com/mods/477979) has two downloads: the 3DS Experience
 itself and an optional, smaller **Skilar's Art Plus Link** (a different look for Link). Add both zips if
-you want Art Plus; the helper then turns off Djipi's own Link so the two do not mix.
+you want Art Plus; the game then starts with Djipi's own Link (`02 Link's Textures`) switched off so
+the two do not mix. Adding Art Plus later to a card that already has Djipi's pack? Switch off Djipi's
+`02 Link's Textures` yourself in the in-game Mods menu.
 
 Using the stroopwafel **USB Partition** plugin instead of an SD card? Pick the FAT32 part of the
 USB drive. Windows may also show the drive's Wii U part and ask to format it: click **Cancel**,
