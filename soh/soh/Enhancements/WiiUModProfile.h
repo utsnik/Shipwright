@@ -3,7 +3,8 @@
 // Wii U defaults for packs found in mods/ for the first time: which of the files in Djipi's 3DS Experience and
 // Skilar's Art Plus Link (GameBanana 477979) start switched on, and in what order. This is the set that was
 // play-tested on the console in October 2026. Packs the user already has in EnabledMods are never touched (except once,
-// on the first start with this profile: see gWiiU.ModProfileApplied in mod_menu.cpp), and a
+// on the first start with this profile: see gWiiU.ModProfileApplied in mod_menu.cpp; and Djipi's Link, once, when Art
+// Plus is switched on for the first time: see ArtPlusArrives), and a
 // pack that starts off can be switched on in the mod menu (it is then kept in EnabledMods).
 //
 // Pure functions on file names (no extension, as the mod menu stores them) so they can be tested on a PC.
@@ -50,6 +51,20 @@ inline bool StartsDisabled(const std::string& name, bool artPlusPresent) {
         return true;
     }
     return false;
+}
+
+// True when this batch switches Art Plus on for the first time: no Art Plus pack was enabled before, and one is
+// about to be. Djipi's Link (02) may already be enabled from an earlier start without Art Plus; it is then switched
+// off once, here. Later starts see Art Plus already enabled, so a 02 the player switches back on stays on.
+inline bool ArtPlusArrives(const std::vector<std::string>& enabledBefore, const std::vector<std::string>& newlyEnabled) {
+    const auto anyArtPlus = [](const std::vector<std::string>& names) {
+        return std::any_of(names.begin(), names.end(), IsArtPlus);
+    };
+    return !anyArtPlus(enabledBefore) && anyArtPlus(newlyEnabled);
+}
+
+inline bool IsDjipiLink(const std::string& name) {
+    return StartsWith(name, "Djipi's 3DE - 02 ");
 }
 
 // Load-order group for a batch of newly found packs (lower loads first; later packs win):

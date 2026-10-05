@@ -193,6 +193,18 @@ void UpdateModFiles(bool init = false, bool reset = false) {
                     }
                 }
                 WiiUModProfile::SortNew(newlyEnabled);
+                if (WiiUModProfile::ArtPlusArrives(enabledModFiles, newlyEnabled)) {
+                    // Art Plus added to a card that already had Djipi's Link on: the two Links mix (odd face).
+                    for (auto it = enabledModFiles.begin(); it != enabledModFiles.end();) {
+                        if (WiiUModProfile::IsDjipiLink(*it)) {
+                            disabledModFiles.push_back(*it);
+                            it = enabledModFiles.erase(it);
+                            changed = true;
+                        } else {
+                            ++it;
+                        }
+                    }
+                }
                 changed |= !newlyEnabled.empty();
                 for (const auto& name : newlyEnabled) {
                     enabledModFiles.push_back(name);
