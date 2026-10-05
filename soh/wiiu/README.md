@@ -75,6 +75,10 @@ run the helper, click **Choose your SD card...** and pick the card (for example 
 downloaded pack zips, press **Start**, and wait for **Done**. Windows SmartScreen may say
 **Windows protected your PC**; click **More info**, then **Run anyway**.
 
+Djipi's [GameBanana page](https://gamebanana.com/mods/477979) has two downloads: the 3DS Experience
+itself and an optional, smaller **Skilar's Art Plus Link** (a different look for Link). Add both zips if
+you want Art Plus; the helper then turns off Djipi's own Link so the two do not mix.
+
 Using the stroopwafel **USB Partition** plugin instead of an SD card? Pick the FAT32 part of the
 USB drive. Windows may also show the drive's Wii U part and ask to format it: click **Cancel**,
 or you lose the games installed on it. You can also pick a folder on your PC that contains
@@ -98,6 +102,9 @@ Packs are made and hosted by their authors and are never bundled with this port.
 GameBanana, for example [Djipi's 3DS Experience](https://gamebanana.com/mods/477979). Djipi's pack
 has been played on the Wii U exactly as downloaded (1024 px textures), with plenty of memory to
 spare in the areas tested. Big packs make scene loading slower.
+
+Using Skilar's Art Plus Link (the optional second download on Djipi's page) by hand? Turn off or
+remove Djipi's `02 Link's Textures` pack, or Link's face looks wrong.
 
 ### White screen in the Kokiri Shop with Djipi's pack
 
