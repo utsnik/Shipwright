@@ -78,8 +78,8 @@ downloaded pack zips, press **Start**, and wait for **Done**. Windows SmartScree
 Djipi's [GameBanana page](https://gamebanana.com/mods/477979) has two downloads: the 3DS Experience
 itself and an optional, smaller **Skilar's Art Plus Link** (a different look for Link). Add both zips if
 you want Art Plus; the game then starts with Djipi's own Link (`02 Link's Textures`) switched off so
-the two do not mix. Adding Art Plus later to a card that already has Djipi's pack? Switch off Djipi's
-`02 Link's Textures` yourself in the in-game Mods menu.
+the two do not mix. This also happens once when you add Art Plus later to a card that already has
+Djipi's pack; if you switch `02 Link's Textures` back on yourself, it stays on.
 
 Using the stroopwafel **USB Partition** plugin instead of an SD card? Pick the FAT32 part of the
 USB drive. Windows may also show the drive's Wii U part and ask to format it: click **Cancel**,
@@ -149,6 +149,14 @@ menu; your choice is kept.
   Forest and Hyrule Castle are cut by the grass at 720p. Link can look slightly sunk into some paths.
 - **KeepAltCache** (texture packs only): keeps pack textures between areas while there is memory to
   spare, so going back to an area you just left loads faster.
+
+## Rumble and gyro
+
+Rumble works on the GamePad, Wii Remotes and Pro Controllers. To aim with the GamePad's gyro, open
+the in-game menu, go to **Settings -> Controls -> Popout Bindings Window**, open the **Gyro** section,
+select **+** and press **A** on the GamePad. Then aim in first person (Slingshot, bow, first-person
+view) by turning the GamePad. The gyro preview in the bindings window stays still: the game ignores
+the controller while the menu is open, so test gyro in the game itself.
 
 ## Known limits
 
