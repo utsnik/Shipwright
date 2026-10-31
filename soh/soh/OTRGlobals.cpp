@@ -1663,6 +1663,8 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         setDefault(CVAR_ENHANCEMENT("SceneSpecificDirtPathFix"), 2);
         setDefault("gWiiU.KeepAltCache", 1);
         setDefault("gWiiU.KeepAltCacheMinFreeMB", 110);
+        // The port always renders 16:9: with 4:3 culling, characters vanish before the screen edge.
+        setDefault(CVAR_ENHANCEMENT("WidescreenActorCulling"), 1);
     }
 #endif
 

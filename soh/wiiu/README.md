@@ -141,12 +141,14 @@ Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to u
 
 ## Wii U defaults
 
-On first start the port sets three options for the Wii U. Change any of them in the in-game SoH
+On first start the port sets four options for the Wii U. Change any of them in the in-game SoH
 menu; your choice is kept.
 
 - **30 fps** (Settings). The original game runs at 20; set it back there if a scene feels uneven.
 - **Fix Vanishing Paths: No Vanish** (Enhancements). Without it, dirt paths in Hyrule Field, Kokiri
   Forest and Hyrule Castle are cut by the grass at 720p. Link can look slightly sunk into some paths.
+- **Widescreen Actor Culling** (Enhancements -> Graphics): characters and objects stay visible up to
+  the edges of the 16:9 picture instead of disappearing early.
 - **KeepAltCache** (texture packs only): keeps pack textures between areas while there is memory to
   spare, so going back to an area you just left loads faster.
 
