@@ -2997,6 +2997,12 @@ s32 Ship_CalcShouldDrawAndUpdate(PlayState* play, Actor* actor, Vec3f* projected
             f32 originalAspectRatio = 4.0f / 3.0f;
             f32 currentAspectRatio = OTRGetAspectRatio();
             ratioAdjusted = MAX(currentAspectRatio / originalAspectRatio, 1.0f);
+#ifdef __WIIU__
+            // uncullZoneScale is a tight radius for many NPCs: with the plane moved
+            // out to 16:9 they still popped out just before the screen edge (user,
+            // 2026-10-31). A 10% wider plane keeps them on screen until they leave it.
+            ratioAdjusted *= 1.1f;
+#endif
         }
 
         if ((((fabsf(projectedPos->x) - actor->uncullZoneScale) * (clampedProjectedW / ratioAdjusted)) < 1.0f) &&
