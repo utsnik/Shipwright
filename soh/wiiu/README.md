@@ -168,6 +168,17 @@ the controller while the menu is open, so test gyro in the game itself.
   texture packs.
 - Some torch and lamp glows in Hyrule Field show through the hills as small yellow dots.
 
+## Version history
+
+- **r4** (2026-10-31): fire animates again with HD packs (burning Deku stick, Triforce flames); the
+  pause screen shows the game behind it again; Widescreen Actor Culling on by default and slightly
+  wider, so characters no longer vanish at the screen edges; fixed a start-up crash with an
+  unbuildable gyro mapping in the settings.
+- **r3** (2026-10-11): rumble on the GamePad, Wii Remotes and Pro Controllers; GamePad gyro aiming;
+  Art Plus Link added later is handled for you; fixed a possible crash in menus with pictures.
+- **r2** (2026-10-04): easier install, one-click texture-pack helper, fixes for console freezes.
+- **r1** (2026-10-03): first release.
+
 ## Source code
 
 This port is two branches on top of SoH 9.2.3:
