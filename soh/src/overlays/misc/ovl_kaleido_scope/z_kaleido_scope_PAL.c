@@ -3972,7 +3972,7 @@ void KaleidoScope_Update(PlayState* play) {
 #endif
 
             // pauseCtx->nameSegment = (void*)(((uintptr_t)pauseCtx->iconItemLangSegment + size + 0xF) & ~0xF);
-            pauseCtx->nameSegment = malloc(0x400 + 0xA00); // OTRTODO: GET RID OF THIS
+            pauseCtx->nameSegment = calloc(1, 0x400 + 0xA00); // OTRTODO: GET RID OF THIS
 
             osSyncPrintf("サイズ＝%x\n", size2 + size1 + size0 + size);
             osSyncPrintf("item_name I_N_PT=%x\n", 0x800);
