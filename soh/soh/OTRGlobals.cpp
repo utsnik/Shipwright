@@ -71,6 +71,9 @@ void ThrowInvalidOTR();
 } // namespace Ship
 #include <coreinit/debug.h> // OSFatal
 #include <coreinit/systeminfo.h> // OSEnableHomeButtonMenu
+extern "C" uint32_t OSGetCoreId(void);
+extern "C" OSThread* OSGetCurrentThread(void);
+extern "C" int OSSetThreadAffinity(OSThread* thread, uint32_t affinity);
 #endif
 
 #include <functions.h>
@@ -148,6 +151,15 @@ extern "C" char** cameraStrings;
 
 extern "C" void PadMgr_ThreadEntry(PadMgr* padMgr);
 std::vector<std::shared_ptr<std::string>> cameraStdStrings;
+
+#ifdef __WIIU__
+extern "C" uint64_t gfx_wiiu_perf_audio_wait_us;
+extern "C" uint64_t gfx_wiiu_perf_run_cmds_us;
+extern "C" uint64_t gfx_wiiu_perf_game_tick_us;
+extern "C" uint32_t gfx_wiiu_perf_ticks;
+extern "C" uint32_t gfx_wiiu_perf_audio_core_iterations[3];
+extern "C" int32_t gfx_wiiu_perf_game_core;
+#endif
 
 Color_RGB8 kokiriColor = { 0x1E, 0x69, 0x1B };
 Color_RGB8 goronColor = { 0x64, 0x14, 0x00 };
@@ -1147,7 +1159,20 @@ extern "C" int AudioPlayer_GetDesiredBuffered(void);
 std::unordered_map<std::string, ExtensionEntry, ExtensionCacheHash, ExtensionCacheEqual> ExtensionCache;
 
 void OTRAudio_Thread() {
+#ifdef __WIIU__
+    const int audioCore = CVarGetInteger("gWiiU.AudioCore", -1);
+    if (audioCore >= 0 && audioCore <= 2) {
+        const uint32_t affinity = 1u << audioCore;
+        OSSetThreadAffinity(OSGetCurrentThread(), affinity);
+    }
+#endif
     while (audio.running) {
+#ifdef __WIIU__
+        const uint32_t core = OSGetCoreId();
+        if (core < 3) {
+            ++gfx_wiiu_perf_audio_core_iterations[core];
+        }
+#endif
         {
             std::unique_lock<std::mutex> Lock(audio.mutex);
             while (!audio.processing && audio.running) {
@@ -1663,6 +1688,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         setDefault(CVAR_ENHANCEMENT("SceneSpecificDirtPathFix"), 2);
         setDefault("gWiiU.KeepAltCache", 1);
         setDefault("gWiiU.KeepAltCacheMinFreeMB", 110);
+        setDefault("gWiiU.AudioCore", -1);
         // The port always renders 16:9: with 4:3 culling, characters vanish before the screen edge.
         setDefault(CVAR_ENHANCEMENT("WidescreenActorCulling"), 1);
     }
@@ -2014,6 +2040,17 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
 
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
+#ifdef __WIIU__
+    using PerfClock = std::chrono::steady_clock;
+    const auto gameEntry = PerfClock::now();
+    static auto previousReturn = PerfClock::time_point{};
+    if (previousReturn != PerfClock::time_point{}) {
+        gfx_wiiu_perf_game_tick_us += static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(gameEntry - previousReturn).count());
+    }
+    ++gfx_wiiu_perf_ticks;
+    gfx_wiiu_perf_game_core = OSGetCoreId();
+#endif
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
@@ -2061,16 +2098,30 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
         mtx_replacements.emplace_back();
     }
 
+#ifdef __WIIU__
+    const auto runCommandsStart = PerfClock::now();
+#endif
     RunCommands(commands, mtx_replacements);
+#ifdef __WIIU__
+    gfx_wiiu_perf_run_cmds_us += static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - runCommandsStart).count());
+#endif
 
     last_fps = fps;
     last_update_rate = R_UPDATE_RATE;
 
     {
+#ifdef __WIIU__
+        const auto audioWaitStart = PerfClock::now();
+#endif
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
             audio.cv_from_thread.wait(Lock);
         }
+#ifdef __WIIU__
+        gfx_wiiu_perf_audio_wait_us += static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - audioWaitStart).count());
+#endif
     }
 
     bool curAltAssets = CVarGetInteger(CVAR_SETTING("AltAssets"), 1);
@@ -2085,6 +2136,9 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     // OTRTODO: FIGURE OUT END FRAME POINT
     /* if (OTRGlobals::Instance->context->lastScancode != -1)
          OTRGlobals::Instance->context->lastScancode = -1;*/
+#ifdef __WIIU__
+    previousReturn = PerfClock::now();
+#endif
 }
 
 float divisor_num = 0.0f;
