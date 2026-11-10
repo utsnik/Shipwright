@@ -7,7 +7,7 @@
 extern "C" uint32_t ResourceMgr_IsSceneMasterQuest(int16_t sceneNum);
 extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex);
 extern "C" int16_t ScenePrefetch_GameSetupIndex(void);
-extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, size_t outSize);
+extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, unsigned long outSize);
 #include <ship/Context.h>
 #include <ship/config/ConsoleVariable.h>
 #include <libultraship/bridge/consolevariablebridge.h>

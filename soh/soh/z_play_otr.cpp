@@ -115,7 +115,7 @@ extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex) {
 extern "C" int16_t ScenePrefetch_GameSetupIndex(void) {
     return gSaveContext.sceneSetupIndex;
 }
-extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, size_t outSize) {
+extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, unsigned long outSize) {
     if (sceneId < 0 || sceneId >= SCENE_ID_MAX || out == nullptr || outSize == 0) {
         return false;
     }
