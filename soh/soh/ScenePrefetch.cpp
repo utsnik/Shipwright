@@ -31,6 +31,7 @@ extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, unsigned
 #include <utility>
 #include <vector>
 
+#include <pthread.h>
 #include <coreinit/fastmutex.h>
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
@@ -281,14 +282,17 @@ class Coordinator {
         resourceManager->SetFileLoadObserver([this](const std::string& path, std::shared_ptr<Ship::Archive> archive) {
             Record(path, std::move(archive));
         });
-        if (OSCreateThread(&mThread, WorkerMain, 0, reinterpret_cast<char*>(this), mStack + sizeof(mStack), sizeof(mStack), kWorkerPriority,
-                           OS_THREAD_ATTRIB_AFFINITY_CPU0)) {
-            OSSetThreadName(&mThread, "Scene prefetch");
+        // pthread, not raw OSCreateThread: wut's std::mutex/condition_variable need its per-thread setup (the
+        // archive lock is a std::recursive_mutex). Core and priority are set from inside the thread.
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setstacksize(&attr, kWorkerStackBytes);
+        if (pthread_create(&mThread, &attr, WorkerEntry, this) == 0) {
             mThreadStarted = true;
-            OSResumeThread(&mThread);
         } else {
             SPDLOG_WARN("SCENEPREFETCH worker thread creation failed");
         }
+        pthread_attr_destroy(&attr);
     }
 
     void Shutdown() {
@@ -298,7 +302,7 @@ class Coordinator {
         mGeneration.fetch_add(1, std::memory_order_acq_rel);
         mStopping.store(true, std::memory_order_release);
         if (mThreadStarted) {
-            OSJoinThread(&mThread, nullptr);
+            pthread_join(mThread, nullptr);
             mThreadStarted = false;
         }
         auto resourceManager = Ship::Context::GetInstance()->GetResourceManager();
@@ -550,6 +554,15 @@ class Coordinator {
     }
 
     static int WorkerMain(int, const char**);
+    static void* WorkerEntry(void* self) {
+        OSSetThreadAffinity(OSGetCurrentThread(), OS_THREAD_ATTRIB_AFFINITY_CPU0);
+        OSSetThreadPriority(OSGetCurrentThread(), kWorkerPriority);
+        OSSetThreadName(OSGetCurrentThread(), "Scene prefetch");
+        OSYieldThread();
+        // WorkerMain reads its argv pointer as the Coordinator itself (the old OSCreateThread argv).
+        WorkerMain(0, reinterpret_cast<const char**>(self));
+        return nullptr;
+    }
 
     OSFastMutex mQueueMutex{};
     OSFastMutex mCaptureMutex{};
@@ -557,8 +570,7 @@ class Coordinator {
     Capture mCapture;
     std::atomic<uint32_t> mGeneration{ 0 }; // 32-bit: devkitPPC has no 64-bit atomics
     std::atomic<bool> mStopping{ false };
-    OSThread mThread{};
-    alignas(16) uint8_t mStack[kWorkerStackBytes]{};
+    pthread_t mThread{};
     bool mInitialized = false;
     bool mThreadStarted = false;
     uint16_t mLastTransition = UINT16_MAX;
