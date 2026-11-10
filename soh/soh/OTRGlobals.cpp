@@ -2117,7 +2117,6 @@ int WiiUPipelineSelectPacket() {
 extern "C" void Graph_PipelineInit(void) {
     std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
     sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
-    sWiiUGameThread = std::this_thread::get_id();
     gfx_wiiu_perf_pipeline.store(sWiiUPipelineEnabled ? 1u : 0u, std::memory_order_release);
     if (sWiiUPipelineEnabled) {
         SPDLOG_INFO("[Wii U] render pipeline enabled: game core 2, main thread owns GX2/GUI");
@@ -2134,6 +2133,8 @@ extern "C" void Graph_PipelineBeginPool(uint32_t poolIndex) {
     }
     const uint32_t slot = poolIndex & 1;
     std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
+    // Graph_PipelineInit runs on the main thread; only the game thread reaches BeginPool.
+    sWiiUGameThread = std::this_thread::get_id();
     const auto waitStart = std::chrono::steady_clock::now();
     sWiiUPipelineChanged.wait(lock, [slot] {
         return sWiiUPacketStates[slot] == WiiUPacketState::Free || sWiiUPipelineStopping;
