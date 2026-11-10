@@ -20,8 +20,11 @@ extern "C" PlayState* gPlayState;
 
 #ifdef __WIIU__
 namespace {
-thread_local bool sWiiUSuppressPipelineResourceWait = false;
+// Plain flag, not thread_local (elf2rpl rejects TLS relocations). Only the pipeline game thread sets it, and
+// the resource wait is a no-op on every other thread, so no other thread's value matters.
+bool sWiiUSuppressPipelineResourceWait = false;
 }
+extern "C" bool Graph_PipelineIsGameThread(void);
 
 extern "C" bool wiiu_pipeline_resource_wait_suppressed() {
     return sWiiUSuppressPipelineResourceWait;
@@ -206,11 +209,16 @@ extern "C" bool ResourceMgr_IsAltAssetsEnabled() {
 extern "C" void ResourceMgr_UnloadOriginalWhenAltExists(const char* resName) {
     if (ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists((char*)resName)) {
 #ifdef __WIIU__
-        sWiiUSuppressPipelineResourceWait = true;
+        const bool suppressWait = Graph_PipelineIsGameThread();
+        if (suppressWait) {
+            sWiiUSuppressPipelineResourceWait = true;
+        }
 #endif
         ResourceMgr_UnloadResource((char*)resName);
 #ifdef __WIIU__
-        sWiiUSuppressPipelineResourceWait = false;
+        if (suppressWait) {
+            sWiiUSuppressPipelineResourceWait = false;
+        }
 #endif
     }
 }
