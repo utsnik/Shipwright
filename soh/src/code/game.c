@@ -467,6 +467,7 @@ void GameState_Init(GameState* gameState, GameStateFunc init, GraphicsContext* g
 
 #ifdef __WIIU__
 void wiiu_get_perf_big_heap(uint32_t* free_bytes, uint32_t* largest_free_bytes);
+void ScenePrefetch_Cancel(void);
 
 // Keeping the cache costs ~6 MB of big heap per new area (276 -> 229 MB over 11 areas, flat on revisits), so it is
 // kept only while the big heap has room: below gWiiU.KeepAltCacheMinFreeMB (free or largest block) this scene change
@@ -524,6 +525,7 @@ void GameState_Destroy(GameState* gameState) {
     // across scene changes. Dropping them made every area entry - even straight back into the room just left -
     // re-read, re-inflate and re-upload all of its HD textures (~0.3 s of each 0.45-0.65 s cached entry).
     if (ResourceMgr_IsAltAssetsEnabled() && !WiiU_KeepAltCache()) {
+        ScenePrefetch_Cancel();
         ResourceUnloadDirectory("alt/*");
         gfx_texture_cache_clear();
     }

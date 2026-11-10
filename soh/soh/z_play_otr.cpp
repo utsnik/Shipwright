@@ -3,6 +3,9 @@
 #include "soh/resource/type/Scene.h"
 #include <ship/utils/StringHelper.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#ifdef __WIIU__
+#include "ScenePrefetch.h"
+#endif
 #include "global.h"
 #include "vt.h"
 #include <fast/resource/type/Vertex.h>
@@ -39,6 +42,11 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
     std::string scenePath = StringHelper::Sprintf("scenes/%s/%s/%s", sceneVersion.c_str(), scene->sceneFile.fileName,
                                                   scene->sceneFile.fileName);
 
+#ifdef __WIIU__
+    // Start capture and resolve any learned manifest before the initial scene entry is requested.
+    ScenePrefetch_BeginScene(sceneId, scenePath.c_str(), gSaveContext.sceneSetupIndex);
+#endif
+
     play->sceneSegment = OTRPlay_LoadFile(play, scenePath.c_str());
 
     // Failed to load scene... default to doodongs cavern
@@ -58,6 +66,9 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
 
     osSyncPrintf("ROOM SIZE=%fK\n", roomSize / 1024.0f);
 
+#ifdef __WIIU__
+    ScenePrefetch_SceneInit(play->sceneNum);
+#endif
     GameInteractor_ExecuteOnSceneInit(play->sceneNum);
     SPDLOG_INFO("Scene Init - sceneNum: {0:#x}, entranceIndex: {1:#x}", play->sceneNum, gSaveContext.entranceIndex);
 }

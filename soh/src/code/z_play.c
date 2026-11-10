@@ -53,6 +53,9 @@ void enableBetaQuest();
 void disableBetaQuest();
 
 void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn);
+#ifdef __WIIU__
+void ScenePrefetch_NotifyTransition(u16 entranceIndex);
+#endif
 
 void Play_RequestViewpointBgCam(PlayState* play) {
     Camera_ChangeDataIdx(GET_ACTIVE_CAM(play), play->unk_1242B - 1);
@@ -937,6 +940,9 @@ void Play_Update(PlayState* play) {
                             if (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) {
                                 SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                                 gSaveContext.entranceIndex = play->nextEntranceIndex;
+#ifdef __WIIU__
+                                ScenePrefetch_NotifyTransition(gSaveContext.entranceIndex);
+#endif
 
                                 if (gSaveContext.minigameState == 1) {
                                     gSaveContext.minigameState = 3;
@@ -991,6 +997,9 @@ void Play_Update(PlayState* play) {
                         play->state.running = false;
                         SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                         gSaveContext.entranceIndex = play->nextEntranceIndex;
+#ifdef __WIIU__
+                        ScenePrefetch_NotifyTransition(gSaveContext.entranceIndex);
+#endif
                         play->transitionTrigger = TRANS_TRIGGER_OFF;
                         play->transitionMode = TRANS_MODE_OFF;
                     } else {
@@ -1033,6 +1042,9 @@ void Play_Update(PlayState* play) {
                         play->state.running = 0;
                         SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                         gSaveContext.entranceIndex = play->nextEntranceIndex;
+#ifdef __WIIU__
+                        ScenePrefetch_NotifyTransition(gSaveContext.entranceIndex);
+#endif
                         play->transitionTrigger = TRANS_TRIGGER_OFF;
                         play->transitionMode = TRANS_MODE_OFF;
                     } else {
@@ -1081,6 +1093,9 @@ void Play_Update(PlayState* play) {
                             play->state.running = false;
                             SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                             gSaveContext.entranceIndex = play->nextEntranceIndex;
+#ifdef __WIIU__
+                            ScenePrefetch_NotifyTransition(gSaveContext.entranceIndex);
+#endif
                             play->transitionTrigger = TRANS_TRIGGER_OFF;
                             play->transitionMode = TRANS_MODE_OFF;
                         }

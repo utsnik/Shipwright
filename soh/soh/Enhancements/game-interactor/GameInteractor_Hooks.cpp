@@ -1,4 +1,7 @@
 #include "GameInteractor_Hooks.h"
+#ifdef __WIIU__
+#include "../../ScenePrefetch.h"
+#endif
 
 // MARK: - Gameplay
 
@@ -27,6 +30,9 @@ void GameInteractor_ExecuteOnGameStateMainStart() {
 
 void GameInteractor_ExecuteOnGameFrameUpdate() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnGameFrameUpdate>();
+#ifdef __WIIU__
+    ScenePrefetch_Frame();
+#endif
 }
 
 void GameInteractor_ExecuteOnCameraState(PlayState* play) {

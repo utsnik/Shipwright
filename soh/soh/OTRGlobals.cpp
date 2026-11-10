@@ -73,6 +73,7 @@ void ThrowInvalidOTR();
 } // namespace Ship
 #include <coreinit/debug.h> // OSFatal
 #include <coreinit/systeminfo.h> // OSEnableHomeButtonMenu
+#include "ScenePrefetch.h"
 extern "C" uint32_t OSGetCoreId(void);
 extern "C" OSThread* OSGetCurrentThread(void);
 extern "C" int OSSetThreadAffinity(OSThread* thread, uint32_t affinity);
@@ -1693,11 +1694,17 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         setDefault(CVAR_ENHANCEMENT("SceneSpecificDirtPathFix"), 2);
         setDefault("gWiiU.KeepAltCache", 1);
         setDefault("gWiiU.KeepAltCacheMinFreeMB", 110);
+        // ScenePrefetch is opt-in; setting it to 0 disables both demand learning and byte warming.
+        setDefault("gWiiU.ScenePrefetch", 0);
+        setDefault("gWiiU.ScenePrefetchBudgetKB", 1024);
         setDefault("gWiiU.AudioCore", -1);
         setDefault("gWiiU.RenderPipeline", 0);
         // The port always renders 16:9: with 4:3 culling, characters vanish before the screen edge.
         setDefault(CVAR_ENHANCEMENT("WidescreenActorCulling"), 1);
     }
+#ifdef __WIIU__
+    ScenePrefetch_Initialize();
+#endif
 #endif
 
 #if defined(__WIIU__) && (!defined(WIIU_DIAGNOSTICS) || WIIU_DIAGNOSTICS)
@@ -1872,6 +1879,10 @@ extern "C" void DeinitOTR() {
     }
 #ifdef ENABLE_REMOTE_CONTROL
     SDLNet_Quit();
+#endif
+
+#ifdef __WIIU__
+    ScenePrefetch_Shutdown();
 #endif
 
     // Destroying gui here because we have shared ptrs to LUS objects which output to SPDLOG which is destroyed before
