@@ -2057,6 +2057,12 @@ struct WiiURenderPacket {
 
 std::mutex sWiiUPipelineMutex;
 std::condition_variable sWiiUPipelineChanged;
+// Bounded waits: a std::condition_variable handoff between cores lost wakeups on this platform (the audio
+// handoff, 2026-11-10). Re-checking the predicate every 2 ms turns a lost notify into a 2 ms delay, not a hang.
+template <typename Predicate> void WiiUPipelineWait(std::unique_lock<std::mutex>& lock, Predicate predicate) {
+    while (!sWiiUPipelineChanged.wait_for(lock, std::chrono::milliseconds(2), predicate)) {
+    }
+}
 WiiUPacketState sWiiUPacketStates[2] = { WiiUPacketState::Free, WiiUPacketState::Free };
 WiiURenderPacket sWiiUPackets[2];
 uint64_t sWiiUPipelineSequence = 0;
@@ -2156,6 +2162,8 @@ extern "C" void Graph_PipelineInit(void) {
     }
 }
 
+extern "C" void gfx_texture_cache_run_deferred_clear(void);
+extern "C" bool wiiu_pipeline_is_game_thread(void);
 extern "C" bool Graph_PipelineIsGameThread(void) {
     return sWiiUPipelineEnabled && std::this_thread::get_id() == sWiiUGameThread;
 }
@@ -2173,7 +2181,7 @@ extern "C" void Graph_PipelineBeginPool(uint32_t poolIndex) {
     // Graph_PipelineInit runs on the main thread; only the game thread reaches BeginPool.
     sWiiUGameThread = std::this_thread::get_id();
     const auto waitStart = std::chrono::steady_clock::now();
-    sWiiUPipelineChanged.wait(lock, [slot] {
+    WiiUPipelineWait(lock, [slot] {
         return sWiiUPacketStates[slot] == WiiUPacketState::Free || sWiiUPipelineStopping;
     });
     if (sWiiUPacketStates[slot] == WiiUPacketState::Free) {
@@ -2224,7 +2232,7 @@ extern "C" bool Graph_PipelineRenderOne(void) {
     int selected;
     {
         std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
-        sWiiUPipelineChanged.wait(lock, [] {
+        WiiUPipelineWait(lock, [] {
             return WiiUPipelineSelectPacket() >= 0 || sWiiUGameExited || sWiiUPipelineStopping;
         });
         selected = WiiUPipelineSelectPacket();
@@ -2234,6 +2242,8 @@ extern "C" bool Graph_PipelineRenderOne(void) {
         sWiiUPacketStates[selected] = WiiUPacketState::Rendering;
     }
 
+    // Texture-cache clears requested by the game thread (scene change, alt toggle) run here, on the GX2 thread.
+    gfx_texture_cache_run_deferred_clear();
     WiiURenderPacket& packet = sWiiUPackets[selected];
     const uint32_t currentGeneration = Ship::Context::GetInstance()->GetResourceManager()->GetCacheGeneration();
     bool rendered = true;
@@ -2260,7 +2270,7 @@ extern "C" void Graph_PipelineWaitForIdle(void) {
         return;
     }
     std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
-    sWiiUPipelineChanged.wait(lock, [] {
+    WiiUPipelineWait(lock, [] {
         return sWiiUPacketStates[0] == WiiUPacketState::Free && sWiiUPacketStates[1] == WiiUPacketState::Free;
     });
 }
@@ -2270,12 +2280,16 @@ extern "C" void Graph_PipelineWaitForResources(void) {
         return;
     }
     std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
-    sWiiUPipelineChanged.wait(lock, [] {
+    WiiUPipelineWait(lock, [] {
         return (sWiiUPacketStates[0] == WiiUPacketState::Free ||
                 (sWiiUPipelineBuildPool == 0 && sWiiUPacketStates[0] == WiiUPacketState::Building)) &&
                (sWiiUPacketStates[1] == WiiUPacketState::Free ||
                 (sWiiUPipelineBuildPool == 1 && sWiiUPacketStates[1] == WiiUPacketState::Building));
     });
+}
+
+extern "C" bool wiiu_pipeline_is_game_thread(void) {
+    return Graph_PipelineIsGameThread();
 }
 
 extern "C" void wiiu_pipeline_wait_for_resources(void) {
