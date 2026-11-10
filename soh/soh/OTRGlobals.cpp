@@ -156,10 +156,10 @@ extern "C" void PadMgr_ThreadEntry(PadMgr* padMgr);
 std::vector<std::shared_ptr<std::string>> cameraStdStrings;
 
 #ifdef __WIIU__
-extern "C" std::atomic<uint64_t> gfx_wiiu_perf_audio_wait_us;
-extern "C" std::atomic<uint64_t> gfx_wiiu_perf_run_cmds_us;
-extern "C" std::atomic<uint64_t> gfx_wiiu_perf_game_tick_us;
-extern "C" std::atomic<uint64_t> gfx_wiiu_perf_handoff_wait_us;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_audio_wait_us;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_run_cmds_us;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_game_tick_us;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_handoff_wait_us;
 extern "C" std::atomic<uint32_t> gfx_wiiu_perf_ticks;
 extern "C" std::atomic<uint32_t> gfx_wiiu_perf_audio_core_iterations[3];
 extern "C" std::atomic<int32_t> gfx_wiiu_perf_game_core;

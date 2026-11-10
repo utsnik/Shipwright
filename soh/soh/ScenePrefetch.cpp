@@ -555,7 +555,7 @@ class Coordinator {
     OSFastMutex mCaptureMutex{};
     std::deque<Job> mJobs;
     Capture mCapture;
-    std::atomic<uint64_t> mGeneration{ 0 };
+    std::atomic<uint32_t> mGeneration{ 0 }; // 32-bit: devkitPPC has no 64-bit atomics
     std::atomic<bool> mStopping{ false };
     OSThread mThread{};
     alignas(16) uint8_t mStack[kWorkerStackBytes]{};
