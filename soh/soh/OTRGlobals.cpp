@@ -2134,6 +2134,10 @@ extern "C" void Graph_PipelineInit(void) {
     }
 }
 
+extern "C" bool Graph_PipelineIsGameThread(void) {
+    return sWiiUPipelineEnabled && std::this_thread::get_id() == sWiiUGameThread;
+}
+
 extern "C" bool Graph_PipelineEnabled(void) {
     return sWiiUPipelineEnabled;
 }
@@ -2285,6 +2289,7 @@ extern "C" bool Graph_PipelineIsGameExited(void) {
 #else
 extern "C" void Graph_PipelineInit(void) {}
 extern "C" bool Graph_PipelineEnabled(void) { return false; }
+extern "C" bool Graph_PipelineIsGameThread(void) { return false; }
 extern "C" void Graph_PipelineBeginPool(uint32_t) {}
 extern "C" void Graph_PipelinePublish(Gfx*, uint32_t) {}
 extern "C" void Graph_PipelineSetBuildPool(uint32_t) {}
