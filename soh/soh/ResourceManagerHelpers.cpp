@@ -18,6 +18,16 @@
 
 extern "C" PlayState* gPlayState;
 
+#ifdef __WIIU__
+namespace {
+thread_local bool sWiiUSuppressPipelineResourceWait = false;
+}
+
+extern "C" bool wiiu_pipeline_resource_wait_suppressed() {
+    return sWiiUSuppressPipelineResourceWait;
+}
+#endif
+
 extern "C" uint32_t ResourceMgr_GetNumGameVersions() {
     return Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions().size();
 }
@@ -137,7 +147,9 @@ extern "C" void ResourceMgr_DirtyDirectory(const char* resName) {
 
 extern "C" void ResourceMgr_UnloadResource(const char* resName) {
 #ifdef __WIIU__
-    Graph_PipelineWaitForResources();
+    if (!sWiiUSuppressPipelineResourceWait) {
+        Graph_PipelineWaitForResources();
+    }
 #endif
     std::string path = resName;
     if (path.substr(0, 7) == "__OTR__") {
@@ -193,7 +205,13 @@ extern "C" bool ResourceMgr_IsAltAssetsEnabled() {
 // The resource is only removed from the internal cache to prevent it from used in the next resource lookup
 extern "C" void ResourceMgr_UnloadOriginalWhenAltExists(const char* resName) {
     if (ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists((char*)resName)) {
+#ifdef __WIIU__
+        sWiiUSuppressPipelineResourceWait = true;
+#endif
         ResourceMgr_UnloadResource((char*)resName);
+#ifdef __WIIU__
+        sWiiUSuppressPipelineResourceWait = false;
+#endif
     }
 }
 

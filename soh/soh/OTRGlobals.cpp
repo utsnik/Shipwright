@@ -164,7 +164,6 @@ extern "C" std::atomic<uint32_t> gfx_wiiu_perf_audio_core_iterations[3];
 extern "C" std::atomic<int32_t> gfx_wiiu_perf_game_core;
 extern "C" std::atomic<uint32_t> gfx_wiiu_perf_pipeline;
 extern "C" std::atomic<int32_t> gfx_wiiu_perf_scene_tag;
-extern "C" void gfx_wiiu_wait_for_render_fence(void);
 #endif
 
 Color_RGB8 kokiriColor = { 0x1E, 0x69, 0x1B };
@@ -2047,6 +2046,7 @@ bool sWiiUPipelineEnabled = false;
 bool sWiiUPipelineStopping = false;
 bool sWiiUGameExited = false;
 uint32_t sWiiUPipelineBuildPool = 0;
+std::thread::id sWiiUGameThread;
 
 std::vector<std::unordered_map<Mtx*, MtxF>> BuildInterpolationMaps(int targetFps, int& fps) {
     static int lastFps;
@@ -2117,6 +2117,7 @@ int WiiUPipelineSelectPacket() {
 extern "C" void Graph_PipelineInit(void) {
     std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
     sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
+    sWiiUGameThread = std::this_thread::get_id();
     gfx_wiiu_perf_pipeline.store(sWiiUPipelineEnabled ? 1u : 0u, std::memory_order_release);
     if (sWiiUPipelineEnabled) {
         SPDLOG_INFO("[Wii U] render pipeline enabled: game core 2, main thread owns GX2/GUI");
@@ -2227,11 +2228,16 @@ extern "C" void Graph_PipelineWaitForIdle(void) {
 }
 
 extern "C" void Graph_PipelineWaitForResources(void) {
-    if (!sWiiUPipelineEnabled) {
+    if (!sWiiUPipelineEnabled || std::this_thread::get_id() != sWiiUGameThread) {
         return;
     }
-    Graph_PipelineWaitForIdle();
-    gfx_wiiu_wait_for_render_fence();
+    std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
+    sWiiUPipelineChanged.wait(lock, [] {
+        return (sWiiUPacketStates[0] == WiiUPacketState::Free ||
+                (sWiiUPipelineBuildPool == 0 && sWiiUPacketStates[0] == WiiUPacketState::Building)) &&
+               (sWiiUPacketStates[1] == WiiUPacketState::Free ||
+                (sWiiUPipelineBuildPool == 1 && sWiiUPacketStates[1] == WiiUPacketState::Building));
+    });
 }
 
 extern "C" void wiiu_pipeline_wait_for_resources(void) {
