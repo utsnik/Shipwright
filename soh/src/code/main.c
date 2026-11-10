@@ -13,7 +13,9 @@
 #include "soh/CrashHandlerExt.h"
 
 #ifdef __WIIU__
-#include <coreinit/thread.h>
+// Cafe OSThread clashes with libultra OSThread here; libultraship owns the native game-tick thread.
+bool wiiu_start_game_tick_thread(void (*entry)(void));
+void wiiu_join_game_tick_thread(void);
 #endif
 
 s32 gScreenWidth = SCREEN_WIDTH;
@@ -27,7 +29,6 @@ IrqMgr gIrqMgr;
 uintptr_t gSegments[NUM_SEGMENTS];
 OSThread sGraphThread;
 u8 sGraphStack[0x1800];
-u8 sPipelineGameStack[0x8000] __attribute__((aligned(16)));
 u8 sSchedStack[0x600];
 u8 sAudioStack[0x800];
 u8 sPadMgrStack[0x500];
@@ -42,11 +43,8 @@ OSMesgQueue sSiIntMsgQ;
 OSMesg sSiIntMsgBuf[1];
 
 #ifdef __WIIU__
-static int PipelineGameThreadEntry(int argc, const char** argv) {
-    (void)argc;
-    (void)argv;
+static void PipelineGameThreadEntry(void) {
     Graph_ThreadEntry(0);
-    return 0;
 }
 #endif
 
@@ -159,16 +157,12 @@ void Main(void* arg) {
     if (Graph_PipelineEnabled()) {
         bool pipelineThreadStarted = false;
 #ifdef __WIIU__
-        // Core 2 is separate from the GX2/UI owner. Priority 20 leaves the main/UI thread responsive.
-        if (!OSCreateThread(&sGraphThread, PipelineGameThreadEntry, 0, NULL,
-                            sPipelineGameStack + sizeof(sPipelineGameStack),
-                            sizeof(sPipelineGameStack), 20, OS_THREAD_ATTRIB_AFFINITY_CPU2)) {
-            osSyncPrintf("Graph pipeline: OSCreateThread failed\n");
+        // Native Cafe thread on core 2 (libultraship WiiUImpl.cpp); the main thread keeps GX2/GUI.
+        if (!wiiu_start_game_tick_thread(PipelineGameThreadEntry)) {
+            osSyncPrintf("Graph pipeline: game thread creation failed\n");
             Graph_PipelineRequestStop();
         } else {
             pipelineThreadStarted = true;
-            OSSetThreadName(&sGraphThread, "SoH game tick");
-            OSResumeThread(&sGraphThread);
         }
 #endif
         while (WindowIsRunning()) {
@@ -185,7 +179,7 @@ void Main(void* arg) {
         Graph_PipelineRequestStop();
 #ifdef __WIIU__
         if (pipelineThreadStarted) {
-            OSJoinThread(&sGraphThread, NULL);
+            wiiu_join_game_tick_thread();
         }
 #endif
         Graph_PipelineWaitForResources();

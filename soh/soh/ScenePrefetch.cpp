@@ -285,7 +285,7 @@ class Coordinator {
         resourceManager->SetFileLoadObserver([this](const std::string& path, std::shared_ptr<Ship::Archive> archive) {
             Record(path, std::move(archive));
         });
-        if (OSCreateThread(&mThread, WorkerMain, 0, this, mStack + sizeof(mStack), sizeof(mStack), kWorkerPriority,
+        if (OSCreateThread(&mThread, WorkerMain, 0, reinterpret_cast<char*>(this), mStack + sizeof(mStack), sizeof(mStack), kWorkerPriority,
                            OS_THREAD_ATTRIB_AFFINITY_CPU0)) {
             OSSetThreadName(&mThread, "Scene prefetch");
             mThreadStarted = true;
@@ -614,6 +614,10 @@ Coordinator& GetCoordinator() {
 
 } // namespace
 
+} // namespace SOH
+
+using namespace SOH;
+extern "C" {
 void ScenePrefetch_Initialize() {
     GetCoordinator().Initialize();
 }
@@ -642,6 +646,7 @@ void ScenePrefetch_Cancel() {
     GetCoordinator().Cancel();
 }
 
-} // namespace SOH
+} // extern "C"
+
 
 #endif // __WIIU__
