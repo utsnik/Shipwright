@@ -2126,6 +2126,21 @@ int WiiUPipelineSelectPacket() {
 } // namespace
 
 extern "C" void Graph_PipelineInit(void) {
+    if (CVarGetInteger("gWiiU.RenderPipeline", 0) != 0) {
+        // wut creates the OS objects behind std::mutex / std::condition_variable lazily on first use, without
+        // atomics. Once the game thread runs on core 2, the first use of a primitive can race between cores and
+        // build two OS objects (Cemu 2026-11-10: lost audio wakeup, then an ownerless locked audio mutex). Touch
+        // every primitive shared by the game, main and audio threads here, single-threaded, before the game
+        // thread exists.
+        {
+            std::unique_lock<std::mutex> audioLock(audio.mutex);
+            audio.cv_from_thread.wait_for(audioLock, std::chrono::microseconds(1));
+            audio.cv_to_thread.wait_for(audioLock, std::chrono::microseconds(1));
+        }
+        audio.cv_to_thread.notify_all(); // the audio thread rechecks its predicate; harmless
+        std::unique_lock<std::mutex> pipelineLock(sWiiUPipelineMutex);
+        sWiiUPipelineChanged.wait_for(pipelineLock, std::chrono::microseconds(1));
+    }
     std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
     sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
     gfx_wiiu_perf_pipeline.store(sWiiUPipelineEnabled ? 1u : 0u, std::memory_order_release);
