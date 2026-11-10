@@ -142,6 +142,11 @@ class OTRGlobals {
 };
 #endif
 
+#ifdef __cplusplus
+// Wii U render pipeline hooks also used from C++ (ResourceManagerHelpers.cpp); the C declarations
+// below sit in a C-only block.
+extern "C" void Graph_PipelineWaitForResources(void);
+#endif
 #ifndef __cplusplus
 #ifdef __WIIU__
 int InitOTR(int argc, char* argv[]);
