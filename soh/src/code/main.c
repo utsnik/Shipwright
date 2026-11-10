@@ -12,6 +12,10 @@
 #include <libultraship/bridge.h>
 #include "soh/CrashHandlerExt.h"
 
+#ifdef __WIIU__
+#include <coreinit/thread.h>
+#endif
+
 s32 gScreenWidth = SCREEN_WIDTH;
 s32 gScreenHeight = SCREEN_HEIGHT;
 size_t gSystemHeapSize = 0;
@@ -23,6 +27,7 @@ IrqMgr gIrqMgr;
 uintptr_t gSegments[NUM_SEGMENTS];
 OSThread sGraphThread;
 u8 sGraphStack[0x1800];
+u8 sPipelineGameStack[0x8000] __attribute__((aligned(16)));
 u8 sSchedStack[0x600];
 u8 sAudioStack[0x800];
 u8 sPadMgrStack[0x500];
@@ -35,6 +40,15 @@ StackEntry sIrqMgrStackInfo;
 AudioMgr gAudioMgr;
 OSMesgQueue sSiIntMsgQ;
 OSMesg sSiIntMsgBuf[1];
+
+#ifdef __WIIU__
+static int PipelineGameThreadEntry(int argc, const char** argv) {
+    (void)argc;
+    (void)argv;
+    Graph_ThreadEntry(0);
+    return 0;
+}
+#endif
 
 void Main_LogSystemHeap(void) {
     osSyncPrintf(VT_FGCOL(GREEN));
@@ -141,12 +155,51 @@ void Main(void* arg) {
     AudioMgr_Unlock(&gAudioMgr);
 
     StackCheck_Init(&sGraphStackInfo, sGraphStack, sGraphStack + sizeof(sGraphStack), 0, 0x100, "graph");
-    osCreateThread(&sGraphThread, 4, Graph_ThreadEntry, arg, sGraphStack + sizeof(sGraphStack), Z_PRIORITY_GRAPH);
-    osStartThread(&sGraphThread);
-    osSetThreadPri(0, Z_PRIORITY_SCHED);
+    Graph_PipelineInit();
+    if (Graph_PipelineEnabled()) {
+        bool pipelineThreadStarted = false;
+#ifdef __WIIU__
+        // Core 2 is separate from the GX2/UI owner. Priority 20 leaves the main/UI thread responsive.
+        if (!OSCreateThread(&sGraphThread, PipelineGameThreadEntry, 0, NULL,
+                            sPipelineGameStack + sizeof(sPipelineGameStack),
+                            sizeof(sPipelineGameStack), 20, OS_THREAD_ATTRIB_AFFINITY_CPU2)) {
+            osSyncPrintf("Graph pipeline: OSCreateThread failed\n");
+            Graph_PipelineRequestStop();
+        } else {
+            pipelineThreadStarted = true;
+            OSSetThreadName(&sGraphThread, "SoH game tick");
+            OSResumeThread(&sGraphThread);
+        }
+#endif
+        while (WindowIsRunning()) {
+            msg = NULL;
+            if (osRecvMesg(&irqMgrMsgQ, (OSMesg*)&msg, OS_MESG_NOBLOCK) == 0 && msg != NULL &&
+                *msg == OS_SC_PRE_NMI_MSG) {
+                osSyncPrintf("main.c: リセットされたみたいだよ\n");
+                PreNmiBuff_SetReset(gAppNmiBufferPtr);
+            }
+            if (!Graph_PipelineRenderOne()) {
+                break;
+            }
+        }
+        Graph_PipelineRequestStop();
+#ifdef __WIIU__
+        if (pipelineThreadStarted) {
+            OSJoinThread(&sGraphThread, NULL);
+        }
+#endif
+        Graph_PipelineWaitForResources();
+        Graph_PipelineDestroyGraph();
+    } else {
+        // Keep the synchronous path's historical startup and call order unchanged.
+        osCreateThread(&sGraphThread, 4, Graph_ThreadEntry, arg, sGraphStack + sizeof(sGraphStack), Z_PRIORITY_GRAPH);
+        osStartThread(&sGraphThread);
+        osSetThreadPri(0, Z_PRIORITY_SCHED);
 
-    Graph_ThreadEntry(0);
+        Graph_ThreadEntry(0);
+    }
 
+    if (!Graph_PipelineEnabled()) {
     while (true) {
         msg = NULL;
         osRecvMesg(&irqMgrMsgQ, (OSMesg*)&msg, OS_MESG_BLOCK);
@@ -158,9 +211,12 @@ void Main(void* arg) {
             PreNmiBuff_SetReset(gAppNmiBufferPtr);
         }
     }
+    }
 
     osSyncPrintf("mainproc 後始末\n"); // "Cleanup"
-    osDestroyThread(&sGraphThread);
+    if (!Graph_PipelineEnabled()) {
+        osDestroyThread(&sGraphThread);
+    }
     func_800FBFD8();
     osSyncPrintf("mainproc 実行終了\n"); // "End of execution"
 }

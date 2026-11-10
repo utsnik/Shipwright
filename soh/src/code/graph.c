@@ -275,6 +275,11 @@ void Graph_TaskSet00(GraphicsContext* gfxCtx) {
 void Graph_Update(GraphicsContext* gfxCtx, GameState* gameState) {
     u32 problem;
 
+    if (Graph_PipelineEnabled()) {
+        Graph_PipelineBeginPool(gfxCtx->gfxPoolIdx & 1);
+        Graph_PipelineSetBuildPool(gfxCtx->gfxPoolIdx & 1);
+    }
+
     // Skip game frame updates while gfx debugger is active, and execute with the last frame's DL buffer
     if (GfxDebuggerIsDebugging()) {
         Graph_ProcessGfxCommands(runFrameContext.gfxCtx.workBuffer);
@@ -504,9 +509,16 @@ static void RunFrame() {
         }
 
         runFrameContext.nextOvl = Graph_GetNextGameState(gGameState);
+        Graph_PipelineWaitForResources();
         GameState_Destroy(gGameState);
         SYSTEM_ARENA_FREE_DEBUG(gGameState);
         Overlay_FreeGameState(runFrameContext.ovl);
+    }
+
+    if (Graph_PipelineEnabled()) {
+        // The main thread joins this game thread before it destroys the graph/window.
+        Graph_PipelineGameExited();
+        return;
     }
     Graph_Destroy(&runFrameContext.gfxCtx);
     osSyncPrintf("グラフィックスレッド実行終了\n"); // "End of graphic thread execution"
@@ -518,6 +530,18 @@ static void RunFrame() {
 void Graph_ThreadEntry(void* arg0) {
     while (WindowIsRunning()) {
         RunFrame();
+        if (Graph_PipelineEnabled() && Graph_PipelineIsGameExited()) {
+            return;
+        }
+    }
+    if (Graph_PipelineEnabled()) {
+        Graph_PipelineGameExited();
+    }
+}
+
+void Graph_PipelineDestroyGraph(void) {
+    if (Graph_PipelineEnabled()) {
+        Graph_Destroy(&runFrameContext.gfxCtx);
     }
 }
 

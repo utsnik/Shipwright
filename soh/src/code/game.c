@@ -28,6 +28,9 @@ GameState* gGameState;
 int gfx_create_framebuffer(uint32_t width, uint32_t height, uint32_t native_width, uint32_t native_height,
                            uint8_t resize);
 void gfx_texture_cache_clear();
+#ifdef __WIIU__
+void Graph_PipelineWaitForResources(void);
+#endif
 
 void GameState_FaultPrint(void) {
     static char sBtnChars[] = "ABZSuldr*+LRudlr";
@@ -512,6 +515,9 @@ void GameState_Destroy(GameState* gameState) {
 
     // Performing clear skeletons before unload resources fixes an actor heap corruption crash due to the skeleton
     // patching system.
+#ifdef __WIIU__
+    Graph_PipelineWaitForResources();
+#endif
     ResourceMgr_ClearSkeletons();
 
     // Wii U (2026-10-03, default off): gWiiU.KeepAltCache 1 keeps the HD (alt/) resources and the GPU texture cache

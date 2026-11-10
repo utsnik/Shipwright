@@ -136,6 +136,9 @@ extern "C" void ResourceMgr_DirtyDirectory(const char* resName) {
 }
 
 extern "C" void ResourceMgr_UnloadResource(const char* resName) {
+#ifdef __WIIU__
+    Graph_PipelineWaitForResources();
+#endif
     std::string path = resName;
     if (path.substr(0, 7) == "__OTR__") {
         path = path.substr(7);
@@ -564,6 +567,9 @@ extern "C" void ResourceMgr_UnregisterSkeleton(SkelAnime* skelAnime) {
 }
 
 extern "C" void ResourceMgr_ClearSkeletons() {
+#ifdef __WIIU__
+    Graph_PipelineWaitForResources();
+#endif
     SOH::SkeletonPatcher::ClearSkeletons();
 }
 

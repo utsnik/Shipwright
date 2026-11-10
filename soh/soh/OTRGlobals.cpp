@@ -7,6 +7,8 @@
 #include <vector>
 #include <chrono>
 #include <optional>
+#include <condition_variable>
+#include <mutex>
 
 #include "ResourceManagerHelpers.h"
 #include <fast/Fast3dWindow.h>
@@ -153,12 +155,16 @@ extern "C" void PadMgr_ThreadEntry(PadMgr* padMgr);
 std::vector<std::shared_ptr<std::string>> cameraStdStrings;
 
 #ifdef __WIIU__
-extern "C" uint64_t gfx_wiiu_perf_audio_wait_us;
-extern "C" uint64_t gfx_wiiu_perf_run_cmds_us;
-extern "C" uint64_t gfx_wiiu_perf_game_tick_us;
-extern "C" uint32_t gfx_wiiu_perf_ticks;
-extern "C" uint32_t gfx_wiiu_perf_audio_core_iterations[3];
-extern "C" int32_t gfx_wiiu_perf_game_core;
+extern "C" std::atomic<uint64_t> gfx_wiiu_perf_audio_wait_us;
+extern "C" std::atomic<uint64_t> gfx_wiiu_perf_run_cmds_us;
+extern "C" std::atomic<uint64_t> gfx_wiiu_perf_game_tick_us;
+extern "C" std::atomic<uint64_t> gfx_wiiu_perf_handoff_wait_us;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_ticks;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_audio_core_iterations[3];
+extern "C" std::atomic<int32_t> gfx_wiiu_perf_game_core;
+extern "C" std::atomic<uint32_t> gfx_wiiu_perf_pipeline;
+extern "C" std::atomic<int32_t> gfx_wiiu_perf_scene_tag;
+extern "C" void gfx_wiiu_wait_for_render_fence(void);
 #endif
 
 Color_RGB8 kokiriColor = { 0x1E, 0x69, 0x1B };
@@ -1170,7 +1176,7 @@ void OTRAudio_Thread() {
 #ifdef __WIIU__
         const uint32_t core = OSGetCoreId();
         if (core < 3) {
-            ++gfx_wiiu_perf_audio_core_iterations[core];
+            gfx_wiiu_perf_audio_core_iterations[core].fetch_add(1, std::memory_order_relaxed);
         }
 #endif
         {
@@ -1689,6 +1695,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         setDefault("gWiiU.KeepAltCache", 1);
         setDefault("gWiiU.KeepAltCacheMinFreeMB", 110);
         setDefault("gWiiU.AudioCore", -1);
+        setDefault("gWiiU.RenderPipeline", 0);
         // The port always renders 16:9: with 4:3 culling, characters vanish before the screen edge.
         setDefault(CVAR_ENHANCEMENT("WidescreenActorCulling"), 1);
     }
@@ -2015,15 +2022,270 @@ extern "C" void Graph_StartFrame() {
 #endif
 }
 
-void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements) {
+#ifdef __WIIU__
+bool RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements,
+                 bool stopOnDroppedFrame);
+namespace {
+enum class WiiUPacketState : uint8_t { Free, Building, Published, Rendering };
+
+struct WiiURenderPacket {
+    Gfx* commands = nullptr;
+    uint32_t poolIndex = 0;
+    int32_t scene = -1;
+    uint32_t resourceGeneration = 0;
+    int targetFps = 20;
+    uint64_t sequence = 0;
+    std::vector<std::unordered_map<Mtx*, MtxF>> interpolationMaps;
+};
+
+std::mutex sWiiUPipelineMutex;
+std::condition_variable sWiiUPipelineChanged;
+WiiUPacketState sWiiUPacketStates[2] = { WiiUPacketState::Free, WiiUPacketState::Free };
+WiiURenderPacket sWiiUPackets[2];
+uint64_t sWiiUPipelineSequence = 0;
+bool sWiiUPipelineEnabled = false;
+bool sWiiUPipelineStopping = false;
+bool sWiiUGameExited = false;
+uint32_t sWiiUPipelineBuildPool = 0;
+
+std::vector<std::unordered_map<Mtx*, MtxF>> BuildInterpolationMaps(int targetFps, int& fps) {
+    static int lastFps;
+    static int lastUpdateRate;
+    static int time;
+    std::vector<std::unordered_map<Mtx*, MtxF>> maps;
+    fps = targetFps;
+    const int originalFps = 60 / R_UPDATE_RATE;
+    if (targetFps == 20 || originalFps > targetFps) {
+        fps = originalFps;
+    }
+
+    if (lastFps != fps || lastUpdateRate != R_UPDATE_RATE) {
+        time = 0;
+    }
+
+    const int nextOriginalFrame = fps;
+    while (time + originalFps <= nextOriginalFrame) {
+        time += originalFps;
+        if (time != nextOriginalFrame) {
+            maps.push_back(FrameInterpolation_Interpolate((float)time / nextOriginalFrame));
+        } else {
+            maps.emplace_back();
+        }
+    }
+    time -= fps;
+
+    if (GfxDebuggerIsDebugging()) {
+        maps.clear();
+        maps.emplace_back();
+    }
+
+    lastFps = fps;
+    lastUpdateRate = R_UPDATE_RATE;
+    return maps;
+}
+
+void WiiUPipelinePublish(Gfx* commands, uint32_t poolIndex, std::vector<std::unordered_map<Mtx*, MtxF>> maps,
+                         int targetFps) {
+    const uint32_t slot = poolIndex & 1;
+    auto& packet = sWiiUPackets[slot];
+    packet.commands = commands;
+    packet.poolIndex = slot;
+    packet.scene = gPlayState != nullptr ? gPlayState->sceneNum : -1;
+    packet.resourceGeneration = Ship::Context::GetInstance()->GetResourceManager()->GetCacheGeneration();
+    packet.targetFps = targetFps;
+    packet.sequence = ++sWiiUPipelineSequence;
+    packet.interpolationMaps = std::move(maps);
+    gfx_wiiu_perf_scene_tag.store(packet.scene, std::memory_order_release);
+    sWiiUPacketStates[slot] = WiiUPacketState::Published;
+    sWiiUPipelineChanged.notify_all();
+}
+
+int WiiUPipelineSelectPacket() {
+    int selected = -1;
+    for (int i = 0; i < 2; ++i) {
+        if (sWiiUPacketStates[i] != WiiUPacketState::Published) {
+            continue;
+        }
+        if (selected < 0 || sWiiUPackets[i].sequence < sWiiUPackets[selected].sequence) {
+            selected = i;
+        }
+    }
+    return selected;
+}
+} // namespace
+
+extern "C" void Graph_PipelineInit(void) {
+    std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+    sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
+    gfx_wiiu_perf_pipeline.store(sWiiUPipelineEnabled ? 1u : 0u, std::memory_order_release);
+    if (sWiiUPipelineEnabled) {
+        SPDLOG_INFO("[Wii U] render pipeline enabled: game core 2, main thread owns GX2/GUI");
+    }
+}
+
+extern "C" bool Graph_PipelineEnabled(void) {
+    return sWiiUPipelineEnabled;
+}
+
+extern "C" void Graph_PipelineBeginPool(uint32_t poolIndex) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    const uint32_t slot = poolIndex & 1;
+    std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
+    const auto waitStart = std::chrono::steady_clock::now();
+    sWiiUPipelineChanged.wait(lock, [slot] {
+        return sWiiUPacketStates[slot] == WiiUPacketState::Free || sWiiUPipelineStopping;
+    });
+    if (sWiiUPacketStates[slot] == WiiUPacketState::Free) {
+        sWiiUPacketStates[slot] = WiiUPacketState::Building;
+    }
+    gfx_wiiu_perf_handoff_wait_us.fetch_add(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - waitStart).count(),
+        std::memory_order_relaxed);
+}
+
+extern "C" void Graph_PipelinePublish(Gfx* commands, uint32_t poolIndex) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    const int targetFps = OTRGlobals::Instance->GetInterpolationFPS();
+    int fps = targetFps;
+    auto maps = BuildInterpolationMaps(targetFps, fps);
+    std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+    if (sWiiUPacketStates[poolIndex & 1] == WiiUPacketState::Building) {
+        if (sWiiUPipelineStopping) {
+            sWiiUPacketStates[poolIndex & 1] = WiiUPacketState::Free;
+            sWiiUPipelineChanged.notify_all();
+        } else {
+            WiiUPipelinePublish(commands, poolIndex, std::move(maps), fps);
+        }
+    }
+}
+
+extern "C" void Graph_PipelineSetBuildPool(uint32_t poolIndex) {
+    sWiiUPipelineBuildPool = poolIndex & 1;
+}
+
+extern "C" bool Graph_PipelineRenderOne(void) {
+    if (!sWiiUPipelineEnabled) {
+        return false;
+    }
+    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetInstance()->GetWindow());
+    if (wnd == nullptr) {
+        return false;
+    }
+
+    // This is the only event/input pump in the enabled path. It runs on the GX2/GUI owner.
+    wnd->HandleEvents();
+    if (!wnd->IsFrameReady()) {
+        return true;
+    }
+
+    int selected;
+    {
+        std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
+        sWiiUPipelineChanged.wait(lock, [] {
+            return WiiUPipelineSelectPacket() >= 0 || sWiiUGameExited || sWiiUPipelineStopping;
+        });
+        selected = WiiUPipelineSelectPacket();
+        if (selected < 0) {
+            return false;
+        }
+        sWiiUPacketStates[selected] = WiiUPacketState::Rendering;
+    }
+
+    WiiURenderPacket& packet = sWiiUPackets[selected];
+    const uint32_t currentGeneration = Ship::Context::GetInstance()->GetResourceManager()->GetCacheGeneration();
+    bool rendered = true;
+    if (currentGeneration == packet.resourceGeneration) {
+        wnd->SetTargetFps(packet.targetFps);
+        const auto runCommandsStart = std::chrono::steady_clock::now();
+        rendered = RunCommands(packet.commands, packet.interpolationMaps, true);
+        gfx_wiiu_perf_run_cmds_us.fetch_add(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - runCommandsStart)
+                .count(),
+            std::memory_order_relaxed);
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+        sWiiUPacketStates[selected] = rendered ? WiiUPacketState::Free : WiiUPacketState::Published;
+        sWiiUPipelineChanged.notify_all();
+    }
+    return true;
+}
+
+extern "C" void Graph_PipelineWaitForIdle(void) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    std::unique_lock<std::mutex> lock(sWiiUPipelineMutex);
+    sWiiUPipelineChanged.wait(lock, [] {
+        return sWiiUPacketStates[0] == WiiUPacketState::Free && sWiiUPacketStates[1] == WiiUPacketState::Free;
+    });
+}
+
+extern "C" void Graph_PipelineWaitForResources(void) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    Graph_PipelineWaitForIdle();
+    gfx_wiiu_wait_for_render_fence();
+}
+
+extern "C" void wiiu_pipeline_wait_for_resources(void) {
+    Graph_PipelineWaitForResources();
+}
+
+extern "C" void Graph_PipelineRequestStop(void) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+    sWiiUPipelineStopping = true;
+    for (WiiUPacketState& state : sWiiUPacketStates) {
+        if (state == WiiUPacketState::Published) {
+            state = WiiUPacketState::Free;
+        }
+    }
+    sWiiUPipelineChanged.notify_all();
+}
+
+extern "C" void Graph_PipelineGameExited(void) {
+    if (!sWiiUPipelineEnabled) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+    sWiiUGameExited = true;
+    sWiiUPipelineChanged.notify_all();
+}
+
+extern "C" bool Graph_PipelineIsGameExited(void) {
+    return sWiiUGameExited;
+}
+#else
+extern "C" void Graph_PipelineInit(void) {}
+extern "C" bool Graph_PipelineEnabled(void) { return false; }
+extern "C" void Graph_PipelineBeginPool(uint32_t) {}
+extern "C" void Graph_PipelinePublish(Gfx*, uint32_t) {}
+extern "C" void Graph_PipelineSetBuildPool(uint32_t) {}
+extern "C" bool Graph_PipelineRenderOne(void) { return false; }
+extern "C" void Graph_PipelineWaitForIdle(void) {}
+extern "C" void Graph_PipelineWaitForResources(void) {}
+extern "C" void wiiu_pipeline_wait_for_resources(void) {}
+extern "C" void Graph_PipelineRequestStop(void) {}
+extern "C" void Graph_PipelineGameExited(void) {}
+extern "C" bool Graph_PipelineIsGameExited(void) { return false; }
+#endif
+
+bool RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements,
+                 bool stopOnDroppedFrame) {
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(OTRGlobals::Instance->context->GetWindow());
 
     if (wnd == nullptr) {
-        return;
+        return false;
     }
-
-    // Process window events for resize, mouse, keyboard events
-    wnd->HandleEvents();
 
     auto intp = wnd->GetInterpreterWeak().lock().get();
     intp->mInterpolationIndex = 0;
@@ -2031,11 +2293,18 @@ void RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>
     UIWidgets::Colors themeColor =
         static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), UIWidgets::Colors::LightBlue));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, SafeThemeColor(themeColor));
+    bool rendered = true;
     for (const auto& m : mtx_replacements) {
-        wnd->DrawAndRunGraphicsCommands(Commands, m);
+        if (!wnd->DrawAndRunGraphicsCommands(Commands, m)) {
+            rendered = false;
+            if (stopOnDroppedFrame) {
+                break;
+            }
+        }
         intp->mInterpolationIndex++;
     }
     ImGui::PopStyleColor();
+    return rendered;
 }
 
 // C->C++ Bridge
@@ -2045,11 +2314,13 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     const auto gameEntry = PerfClock::now();
     static auto previousReturn = PerfClock::time_point{};
     if (previousReturn != PerfClock::time_point{}) {
-        gfx_wiiu_perf_game_tick_us += static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::microseconds>(gameEntry - previousReturn).count());
+        gfx_wiiu_perf_game_tick_us.fetch_add(static_cast<uint64_t>(
+                                                 std::chrono::duration_cast<std::chrono::microseconds>(gameEntry - previousReturn).count()),
+                                             std::memory_order_relaxed);
     }
-    ++gfx_wiiu_perf_ticks;
-    gfx_wiiu_perf_game_core = OSGetCoreId();
+    gfx_wiiu_perf_ticks.fetch_add(1, std::memory_order_relaxed);
+    gfx_wiiu_perf_game_core.store(OSGetCoreId(), std::memory_order_relaxed);
+    gfx_wiiu_perf_scene_tag.store(gPlayState != nullptr ? gPlayState->sceneNum : -1, std::memory_order_release);
 #endif
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -2057,58 +2328,69 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     }
 
     audio.cv_to_thread.notify_one();
-    std::vector<std::unordered_map<Mtx*, MtxF>> mtx_replacements;
-    int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
-    static int last_fps;
-    static int last_update_rate;
-    static int time;
-    int fps = target_fps;
-    int original_fps = 60 / R_UPDATE_RATE;
-    auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetInstance()->GetWindow());
+#ifdef __WIIU__
+    if (Graph_PipelineEnabled()) {
+        // The game thread owns interpolation recording and publishes immutable maps with the closed packet.
+        Graph_PipelinePublish(commands, sWiiUPipelineBuildPool);
+    } else
+#endif
+    {
+        std::vector<std::unordered_map<Mtx*, MtxF>> mtx_replacements;
+        int target_fps = OTRGlobals::Instance->GetInterpolationFPS();
+        static int last_fps;
+        static int last_update_rate;
+        static int time;
+        int fps = target_fps;
+        int original_fps = 60 / R_UPDATE_RATE;
+        auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetInstance()->GetWindow());
 
-    if (target_fps == 20 || original_fps > target_fps) {
-        fps = original_fps;
-    }
+        if (target_fps == 20 || original_fps > target_fps) {
+            fps = original_fps;
+        }
 
-    if (last_fps != fps || last_update_rate != R_UPDATE_RATE) {
-        time = 0;
-    }
+        if (last_fps != fps || last_update_rate != R_UPDATE_RATE) {
+            time = 0;
+        }
 
-    // time_base = fps * original_fps (one second)
-    int next_original_frame = fps;
+        // time_base = fps * original_fps (one second)
+        int next_original_frame = fps;
 
-    while (time + original_fps <= next_original_frame) {
-        time += original_fps;
-        if (time != next_original_frame) {
-            mtx_replacements.push_back(FrameInterpolation_Interpolate((float)time / next_original_frame));
-        } else {
+        while (time + original_fps <= next_original_frame) {
+            time += original_fps;
+            if (time != next_original_frame) {
+                mtx_replacements.push_back(FrameInterpolation_Interpolate((float)time / next_original_frame));
+            } else {
+                mtx_replacements.emplace_back();
+            }
+        }
+
+        time -= fps;
+
+        if (wnd != nullptr) {
+            wnd->SetTargetFps(fps);
+            // Mode 0 keeps the historical event-to-render ordering. Mode 1 pumps this on the main thread.
+            wnd->HandleEvents();
+        }
+
+        // When the gfx debugger is active, only run with the final mtx
+        if (GfxDebuggerIsDebugging()) {
+            mtx_replacements.clear();
             mtx_replacements.emplace_back();
         }
-    }
-
-    time -= fps;
-
-    if (wnd != nullptr) {
-        wnd->SetTargetFps(fps);
-    }
-
-    // When the gfx debugger is active, only run with the final mtx
-    if (GfxDebuggerIsDebugging()) {
-        mtx_replacements.clear();
-        mtx_replacements.emplace_back();
-    }
 
 #ifdef __WIIU__
-    const auto runCommandsStart = PerfClock::now();
+        const auto runCommandsStart = PerfClock::now();
 #endif
-    RunCommands(commands, mtx_replacements);
+        RunCommands(commands, mtx_replacements, false);
 #ifdef __WIIU__
-    gfx_wiiu_perf_run_cmds_us += static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - runCommandsStart).count());
+        gfx_wiiu_perf_run_cmds_us.fetch_add(static_cast<uint64_t>(
+                                                 std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - runCommandsStart).count()),
+                                             std::memory_order_relaxed);
 #endif
 
-    last_fps = fps;
-    last_update_rate = R_UPDATE_RATE;
+        last_fps = fps;
+        last_update_rate = R_UPDATE_RATE;
+    }
 
     {
 #ifdef __WIIU__
@@ -2119,13 +2401,15 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
             audio.cv_from_thread.wait(Lock);
         }
 #ifdef __WIIU__
-        gfx_wiiu_perf_audio_wait_us += static_cast<uint64_t>(
-            std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - audioWaitStart).count());
+        gfx_wiiu_perf_audio_wait_us.fetch_add(static_cast<uint64_t>(
+                                                   std::chrono::duration_cast<std::chrono::microseconds>(PerfClock::now() - audioWaitStart).count()),
+                                               std::memory_order_relaxed);
 #endif
     }
 
     bool curAltAssets = CVarGetInteger(CVAR_SETTING("AltAssets"), 1);
     if (prevAltAssets != curAltAssets) {
+        Graph_PipelineWaitForResources();
         prevAltAssets = curAltAssets;
         Ship::Context::GetInstance()->GetResourceManager()->SetAltAssetsEnabled(curAltAssets);
         gfx_texture_cache_clear();
@@ -2905,7 +3189,7 @@ extern "C" void CheckTracker_RecalculateAvailableChecks() {
 #ifdef __WIIU__
 // Scene tag for libultraship's once-a-minute PERF log line (gfx_gx2.cpp).
 extern "C" int wiiu_perf_scene(void) {
-    return gPlayState != nullptr ? gPlayState->sceneNum : -1;
+    return gfx_wiiu_perf_scene_tag.load(std::memory_order_acquire);
 }
 
 // SoH's archive-preload defaults (the engine's are 16 MB per archive / 64 MB in total): oot.o2r (~34 MB) is the
