@@ -2,8 +2,11 @@
 
 #include "ScenePrefetch.h"
 
-#include "ResourceManagerHelpers.h"
-#include "global.h"
+// Only Cafe and libultraship headers here: SoH's game headers bring libultra's OSThread/OSTime, which clash
+// with coreinit/thread.h. The few game values needed come through C helpers in z_play_otr.cpp.
+extern "C" uint32_t ResourceMgr_IsSceneMasterQuest(int16_t sceneNum);
+extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex);
+extern "C" int16_t ScenePrefetch_GameSetupIndex(void);
 #include <ship/Context.h>
 #include <ship/config/ConsoleVariable.h>
 #include <ship/resource/ResourceManager.h>
@@ -402,12 +405,12 @@ class Coordinator {
             return;
         }
         mLastTransition = entranceIndex;
-        const int16_t sceneId = gEntranceTable[entranceIndex].scene;
+        const int16_t sceneId = ScenePrefetch_GameSceneForEntrance(entranceIndex);
         if (sceneId < 0 || sceneId >= SCENE_ID_MAX) {
             return;
         }
         const std::string path = ScenePath(sceneId);
-        const std::string key = SceneKey(sceneId, path, gSaveContext.sceneSetupIndex);
+        const std::string key = SceneKey(sceneId, path, ScenePrefetch_GameSetupIndex());
         const std::string signature = ArchiveSignature();
         mGeneration.fetch_add(1, std::memory_order_acq_rel);
         {
