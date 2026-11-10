@@ -1166,7 +1166,14 @@ std::unordered_map<std::string, ExtensionEntry, ExtensionCacheHash, ExtensionCac
 
 void OTRAudio_Thread() {
 #ifdef __WIIU__
-    const int audioCore = CVarGetInteger("gWiiU.AudioCore", -1);
+    int audioCore = CVarGetInteger("gWiiU.AudioCore", -1);
+    if (audioCore < 0 && CVarGetInteger("gWiiU.RenderPipeline", 0) != 0) {
+        // Render pipeline: the game thread (core 2) and this thread hand off every tick through audio.mutex and
+        // two condition variables. With this thread free to run on any core, that handoff deadlocked within
+        // a minute (Cemu 2026-11-10, even with the notify under the lock); on the game thread's core it ran
+        // cleanly. An explicit gWiiU.AudioCore still wins.
+        audioCore = 2;
+    }
     if (audioCore >= 0 && audioCore <= 2) {
         const uint32_t affinity = 1u << audioCore;
         OSSetThreadAffinity(OSGetCurrentThread(), affinity);
