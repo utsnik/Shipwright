@@ -2363,9 +2363,11 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
+        // Notify while holding the mutex. Notifying after the unlock lost the wakeup when the game ran on its
+        // own core (render pipeline, Cemu 2026-11-10: game thread in the audio-done wait, audio thread in its
+        // start wait, processing already true).
+        audio.cv_to_thread.notify_one();
     }
-
-    audio.cv_to_thread.notify_one();
 #ifdef __WIIU__
     if (Graph_PipelineEnabled()) {
         // The game thread owns interpolation recording and publishes immutable maps with the closed packet.
