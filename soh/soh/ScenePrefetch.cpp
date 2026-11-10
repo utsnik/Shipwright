@@ -401,12 +401,12 @@ class Coordinator {
     }
 
     void Transition(uint16_t entranceIndex) {
-        if (!mInitialized || !Enabled() || entranceIndex >= ENTR_MAX || mLastTransition == entranceIndex) {
+        if (!mInitialized || !Enabled() || mLastTransition == entranceIndex) {
             return;
         }
         mLastTransition = entranceIndex;
         const int16_t sceneId = ScenePrefetch_GameSceneForEntrance(entranceIndex);
-        if (sceneId < 0 || sceneId >= SCENE_ID_MAX) {
+        if (sceneId < 0) { // the helper returns -1 for an out-of-range entrance or scene
             return;
         }
         const std::string path = ScenePath(sceneId);

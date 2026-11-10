@@ -105,7 +105,11 @@ void OTRPlay_InitScene(PlayState* play, s32 spawn) {
 #ifdef __WIIU__
 // Game-state reads for ScenePrefetch.cpp, which cannot include SoH's game headers (libultra/Cafe type clash).
 extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex) {
-    return gEntranceTable[entranceIndex].scene;
+    if (entranceIndex >= ENTR_MAX) {
+        return -1;
+    }
+    const int16_t scene = gEntranceTable[entranceIndex].scene;
+    return (scene >= 0 && scene < SCENE_ID_MAX) ? scene : -1;
 }
 
 extern "C" int16_t ScenePrefetch_GameSetupIndex(void) {
