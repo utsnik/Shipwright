@@ -115,4 +115,16 @@ extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex) {
 extern "C" int16_t ScenePrefetch_GameSetupIndex(void) {
     return gSaveContext.sceneSetupIndex;
 }
+extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, size_t outSize) {
+    if (sceneId < 0 || sceneId >= SCENE_ID_MAX || out == nullptr || outSize == 0) {
+        return false;
+    }
+    const bool dungeon = (sceneId >= SCENE_DEKU_TREE && sceneId <= SCENE_ICE_CAVERN) ||
+                         sceneId == SCENE_GERUDO_TRAINING_GROUND || sceneId == SCENE_INSIDE_GANONS_CASTLE;
+    const char* version = !dungeon ? "shared" : (ResourceMgr_IsSceneMasterQuest(sceneId) ? "mq" : "nonmq");
+    const char* file = gSceneTable[sceneId].sceneFile.fileName;
+    const int written = snprintf(out, outSize, "scenes/%s/%s/%s", version, file, file);
+    return written > 0 && static_cast<size_t>(written) < outSize;
+}
 #endif
+

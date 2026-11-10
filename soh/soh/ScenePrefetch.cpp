@@ -7,8 +7,10 @@
 extern "C" uint32_t ResourceMgr_IsSceneMasterQuest(int16_t sceneNum);
 extern "C" int16_t ScenePrefetch_GameSceneForEntrance(uint16_t entranceIndex);
 extern "C" int16_t ScenePrefetch_GameSetupIndex(void);
+extern "C" bool ScenePrefetch_GameScenePath(int16_t sceneId, char* out, size_t outSize);
 #include <ship/Context.h>
 #include <ship/config/ConsoleVariable.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/resource/ResourceManager.h>
 #include <ship/resource/archive/Archive.h>
 #include <ship/resource/archive/ArchiveManager.h>
@@ -128,18 +130,9 @@ std::string ManifestFileName(const std::string& key) {
     return stream.str();
 }
 
-std::string SceneVersion(int16_t sceneId) {
-    const bool dungeon = (sceneId >= SCENE_DEKU_TREE && sceneId <= SCENE_ICE_CAVERN) ||
-                         sceneId == SCENE_GERUDO_TRAINING_GROUND || sceneId == SCENE_INSIDE_GANONS_CASTLE;
-    if (!dungeon) {
-        return "shared";
-    }
-    return ResourceMgr_IsSceneMasterQuest(sceneId) ? "mq" : "nonmq";
-}
-
 std::string ScenePath(int16_t sceneId) {
-    const auto& scene = gSceneTable[sceneId];
-    return "scenes/" + SceneVersion(sceneId) + "/" + scene.sceneFile.fileName + "/" + scene.sceneFile.fileName;
+    char path[160];
+    return ScenePrefetch_GameScenePath(sceneId, path, sizeof(path)) ? std::string(path) : std::string();
 }
 
 std::string SceneKey(int16_t sceneId, const std::string& scenePath, int16_t setupIndex) {
