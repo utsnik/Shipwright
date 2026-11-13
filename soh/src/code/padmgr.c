@@ -209,6 +209,65 @@ void PadMgr_RumbleSet(PadMgr* padMgr, u8* ctrlrRumbles) {
     padMgr->rumbleOnFrames = 240;
 }
 
+#ifdef __WIIU__
+// gWiiU.BenchRun = 1 (bench only): drive controller 1's stick along a fixed route so pipeline A/B runs cover the
+// same ground. Headings are world yaws relative to Link's facing when the route starts (converted through the
+// camera's input yaw each frame, so camera swings don't bend the route). Route, at 20 game frames per second:
+// run 3 s ahead, walk 1.5 s to the left, run 4 s left, turn around and run 4 s right, run 3 s back toward the
+// spawn; then repeat. A BENCHRUN line with Link's position every 10 frames shows where he went.
+typedef struct {
+    u16 frames;
+    s16 yaw; // relative to the start facing; +0x4000 = left
+    s8 mag;
+} WiiUBenchSeg;
+static const WiiUBenchSeg sWiiUBenchRoute[] = {
+    { 60, 0, 80 }, { 30, 0x4000, 28 }, { 80, 0x4000, 80 }, { 80, -0x4000, 80 }, { 60, (s16)0x8000, 80 },
+};
+static void PadMgr_WiiUBenchRun(Input* input) {
+    static s32 sScene = -1;
+    static u32 sFrame = 0;
+    static s16 sYaw0 = 0;
+    input->cur.stick_x = 0;
+    input->cur.stick_y = 0;
+    if (gPlayState == NULL || GET_PLAYER(gPlayState) == NULL) {
+        sScene = -1;
+        return;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    if (gPlayState->sceneNum != sScene) {
+        sScene = gPlayState->sceneNum;
+        sFrame = 0;
+    }
+    const u32 k = sFrame++;
+    if (k < 40) {
+        sYaw0 = player->actor.shape.rot.y;
+        return;
+    }
+    u32 t = k - 40;
+    u32 loopFrames = 0;
+    for (u32 i = 0; i < ARRAY_COUNT(sWiiUBenchRoute); i++) {
+        loopFrames += sWiiUBenchRoute[i].frames;
+    }
+    t %= loopFrames;
+    u32 seg = 0;
+    while (t >= sWiiUBenchRoute[seg].frames) {
+        t -= sWiiUBenchRoute[seg].frames;
+        seg++;
+    }
+    const s16 camYaw = Camera_GetInputDirYaw(GET_ACTIVE_CAM(gPlayState));
+    const s16 rel = (s16)(sYaw0 + sWiiUBenchRoute[seg].yaw - camYaw);
+    // func_80077D10: stick angle = Math_Atan2S(relY, -relX), so relX = -M sin(a), relY = M cos(a).
+    input->cur.stick_x = (s8)(-sWiiUBenchRoute[seg].mag * Math_SinS(rel));
+    input->cur.stick_y = (s8)(sWiiUBenchRoute[seg].mag * Math_CosS(rel));
+    if ((k % 10) == 0) {
+        LUSLOG_INFO("BENCHRUN k=%u seg=%u pos=%.0f,%.0f,%.0f yaw=%#06x want=%#06x cam=%#06x speed=%.1f",
+                    k, seg, player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
+                    (u16)player->actor.shape.rot.y, (u16)(sYaw0 + sWiiUBenchRoute[seg].yaw), (u16)camYaw,
+                    player->linearVelocity);
+    }
+}
+#endif
+
 #define PAUSE_BUFFER_INPUT_BLOCK_ID 0
 void PadMgr_ProcessInputs(PadMgr* padMgr) {
     s32 i;
@@ -287,6 +346,11 @@ void PadMgr_ProcessInputs(PadMgr* padMgr) {
                 Fault_AddHungupAndCrash(__FILE__, __LINE__);
         }
 
+#ifdef __WIIU__
+        if (i == 0 && CVarGetInteger("gWiiU.BenchRun", 0) != 0) {
+            PadMgr_WiiUBenchRun(input);
+        }
+#endif
         buttonDiff = input->prev.button ^ input->cur.button;
         input->press.button |= (u16)(buttonDiff & input->cur.button);
         input->rel.button |= (u16)(buttonDiff & input->prev.button);
