@@ -2140,19 +2140,16 @@ int WiiUPipelineSelectPacket() {
 
 extern "C" void Graph_PipelineInit(void) {
     if (CVarGetInteger("gWiiU.RenderPipeline", 0) != 0) {
-        // wut creates the OS objects behind std::mutex / std::condition_variable lazily on first use, without
-        // atomics. Once the game thread runs on core 2, the first use of a primitive can race between cores and
-        // build two OS objects (Cemu 2026-11-10: lost audio wakeup, then an ownerless locked audio mutex). Touch
-        // every primitive shared by the game, main and audio threads here, single-threaded, before the game
-        // thread exists.
-        {
-            std::unique_lock<std::mutex> audioLock(audio.mutex);
-            audio.cv_from_thread.wait_for(audioLock, std::chrono::microseconds(1));
-            audio.cv_to_thread.wait_for(audioLock, std::chrono::microseconds(1));
-        }
-        audio.cv_to_thread.notify_all(); // the audio thread rechecks its predicate; harmless
-        std::unique_lock<std::mutex> pipelineLock(sWiiUPipelineMutex);
-        sWiiUPipelineChanged.wait_for(pipelineLock, std::chrono::microseconds(1));
+        // Create the OS objects behind the shared std::mutex / std::condition_variable here, before the game
+        // thread exists: locking a mutex and notifying a condvar is enough (wut builds them on first use).
+        // Never warm a condvar up with a tiny wait_for: wut 1.9.1 times a wait by arming an OSAlarm and then
+        // calling OSFastCond_Wait, so an alarm that fires before the wait starts is a lost wakeup and the
+        // thread sleeps forever (console 2026-11-13: the 1 us warm-up hung main at boot; Cemu hid it).
+        { std::lock_guard<std::mutex> audioLock(audio.mutex); }
+        audio.cv_from_thread.notify_all(); // waiters recheck their predicates; harmless
+        audio.cv_to_thread.notify_all();
+        { std::lock_guard<std::mutex> pipelineLock(sWiiUPipelineMutex); }
+        sWiiUPipelineChanged.notify_all();
     }
     std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
     sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
