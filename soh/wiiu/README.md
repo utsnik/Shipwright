@@ -19,7 +19,7 @@ Extract this zip to the root of the SD card. It mirrors the required SD-card lay
 | `sd:/wiiu/apps/soh923/fix_blank_skyboxes.py` | Optional skybox repair script. |
 
 After extracting it, add only your generated `oot.o2r` to `sd:/wiiu/apps/soh923/`.
-The bare `soh.rpx` is in a separate `-extras` zip for custom artwork; it is not part of the SD-card zip.
+The bare `soh.rpx` is in a separate `-extras` zip (only needed to build artwork by hand or to launch the `.rpx` directly); it is not part of the SD-card zip.
 
 ## What you need
 
@@ -194,9 +194,16 @@ and the GX2 (Wii U graphics) backend in
 
 ## Make your own artwork
 
-The Wii U Menu icon and the two boot screens (TV and GamePad) are stored inside `soh.wuhb`. To
-use your own, build a new `.wuhb` from `soh.rpx` and your pictures. You don't need to compile
-anything.
+The Wii U Menu icon and the two boot screens (TV and GamePad) are stored inside `soh.wuhb`.
+
+**Easiest: use `WiiU-Pack-Helper.exe`** (from the release page). Under **Custom Wii U Menu
+artwork (optional)**, choose your icon, TV and GamePad pictures (PNG, JPG or BMP; the helper
+scales and crops them to size), tick **Also apply artwork to the installed app on this SD card**, and press
+**Start**. It changes only the pictures inside `soh.wuhb` on your SD card and keeps a backup of
+the original. You don't need `soh.rpx` or the extras zip for this.
+
+**By hand:** build a new `.wuhb` from `soh.rpx` (in the `-extras` zip) and your pictures, as
+below. You don't need to compile anything.
 
 ### 1. Make the pictures
 
