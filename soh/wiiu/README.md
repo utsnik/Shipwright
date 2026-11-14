@@ -141,7 +141,7 @@ Copy `zz-fix-blank-skyboxes.o2r` to `sd:/wiiu/apps/soh923/mods/`. Delete it to u
 
 ## Wii U defaults
 
-On first start the port sets four options for the Wii U. Change any of them in the in-game SoH
+On first start the port sets five options for the Wii U. Change any of them in the in-game SoH
 menu; your choice is kept.
 
 - **30 fps** (Settings). The original game runs at 20; set it back there if a scene feels uneven.
@@ -149,6 +149,9 @@ menu; your choice is kept.
   Forest and Hyrule Castle are cut by the grass at 720p. Link can look slightly sunk into some paths.
 - **Widescreen Actor Culling** (Enhancements -> Graphics): characters and objects stay visible up to
   the edges of the 16:9 picture instead of disappearing early.
+- **Render pipeline** (new in r4.1): the game logic runs on a second CPU core while the picture is
+  drawn, so busy scenes such as Hyrule Castle hold 30 fps. To turn it off, quit the game, open
+  `sd:/wiiu/apps/soh923/shipofharkinian.json` and set `"RenderPipeline": 0` under `"gWiiU"`.
 - **KeepAltCache** (texture packs only): keeps pack textures between areas while there is memory to
   spare, so going back to an area you just left loads faster.
 
@@ -170,6 +173,9 @@ the controller while the menu is open, so test gyro in the game itself.
 
 ## Version history
 
+- **r4.1** (2026-11-14): busy scenes hold 30 fps (render pipeline: the heaviest stretch of Hyrule
+  Castle went from 26 to 30 fps); fixed a crash when pausing at the start of the Boss Rush Ganon
+  fight; the Pack Helper fixes the Hyrule Castle vine that vanished with Djipi's 3DS pack.
 - **r4** (2026-10-31): fire animates again with HD packs (burning Deku stick, Triforce flames); the
   pause screen shows the game behind it again; Widescreen Actor Culling on by default and slightly
   wider, so characters no longer vanish at the screen edges; fixed a start-up crash with an

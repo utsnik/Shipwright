@@ -1167,7 +1167,7 @@ std::unordered_map<std::string, ExtensionEntry, ExtensionCacheHash, ExtensionCac
 void OTRAudio_Thread() {
 #ifdef __WIIU__
     int audioCore = CVarGetInteger("gWiiU.AudioCore", -1);
-    if (audioCore < 0 && CVarGetInteger("gWiiU.RenderPipeline", 0) != 0) {
+    if (audioCore < 0 && CVarGetInteger("gWiiU.RenderPipeline", 1) != 0) {
         // Render pipeline: the game thread (core 2) and this thread hand off every tick through audio.mutex and
         // two condition variables. With this thread free to run on any core, that handoff deadlocked within
         // a minute (Cemu 2026-11-10, even with the notify under the lock); on the game thread's core it ran
@@ -1705,7 +1705,8 @@ extern "C" void InitOTR(int argc, char* argv[]) {
         setDefault("gWiiU.ScenePrefetch", 0);
         setDefault("gWiiU.ScenePrefetchBudgetKB", 1024);
         setDefault("gWiiU.AudioCore", -1);
-        setDefault("gWiiU.RenderPipeline", 0);
+        // Game logic on core 2 in parallel with the render on the main core (r4.1: Hyrule Castle 25.9 -> 29.7 fps).
+        setDefault("gWiiU.RenderPipeline", 1);
         // The port always renders 16:9: with 4:3 culling, characters vanish before the screen edge.
         setDefault(CVAR_ENHANCEMENT("WidescreenActorCulling"), 1);
     }
@@ -2139,7 +2140,7 @@ int WiiUPipelineSelectPacket() {
 } // namespace
 
 extern "C" void Graph_PipelineInit(void) {
-    if (CVarGetInteger("gWiiU.RenderPipeline", 0) != 0) {
+    if (CVarGetInteger("gWiiU.RenderPipeline", 1) != 0) {
         // Create the OS objects behind the shared std::mutex / std::condition_variable here, before the game
         // thread exists: locking a mutex and notifying a condvar is enough (wut builds them on first use).
         // Never warm a condvar up with a tiny wait_for: wut 1.9.1 times a wait by arming an OSAlarm and then
@@ -2152,7 +2153,7 @@ extern "C" void Graph_PipelineInit(void) {
         sWiiUPipelineChanged.notify_all();
     }
     std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
-    sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 0) != 0;
+    sWiiUPipelineEnabled = CVarGetInteger("gWiiU.RenderPipeline", 1) != 0;
     gfx_wiiu_perf_pipeline.store(sWiiUPipelineEnabled ? 1u : 0u, std::memory_order_release);
     if (sWiiUPipelineEnabled) {
         SPDLOG_INFO("[Wii U] render pipeline enabled: game core 2, main thread owns GX2/GUI");
