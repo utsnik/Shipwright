@@ -1,6 +1,7 @@
 #include "global.h"
 #include "vt.h"
 #include <string.h>
+#include <stdlib.h>
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/controls/Mouse.h"
@@ -212,17 +213,61 @@ void PadMgr_RumbleSet(PadMgr* padMgr, u8* ctrlrRumbles) {
 #ifdef __WIIU__
 // gWiiU.BenchRun = 1 (bench only): drive controller 1's stick along a fixed route so pipeline A/B runs cover the
 // same ground. Headings are world yaws relative to Link's facing when the route starts (converted through the
-// camera's input yaw each frame, so camera swings don't bend the route). Route, at 20 game frames per second:
-// run 3 s ahead, walk 1.5 s to the left, run 4 s left, turn around and run 4 s right, run 3 s back toward the
-// spawn; then repeat. A BENCHRUN line with Link's position every 10 frames shows where he went.
+// camera's input yaw each frame, so camera swings don't bend the route). gWiiU.BenchRoute (string) overrides the
+// route: "LEAD|LOOP", each a comma list of frames:degrees:magnitude (degrees counter-clockwise, 90 = left; 20 game
+// frames per second). LEAD runs once, LOOP repeats. Default: run 3 s ahead, walk 1.5 s left, run 4 s left, run
+// 4 s right, run 3 s back. A BENCHRUN line with Link's position every 10 frames shows where he went.
 typedef struct {
     u16 frames;
     s16 yaw; // relative to the start facing; +0x4000 = left
     s8 mag;
 } WiiUBenchSeg;
-static const WiiUBenchSeg sWiiUBenchRoute[] = {
-    { 60, 0, 80 }, { 30, 0x4000, 28 }, { 80, 0x4000, 80 }, { 80, -0x4000, 80 }, { 60, (s16)0x8000, 80 },
-};
+#define WIIU_BENCH_MAX_SEGS 32
+static WiiUBenchSeg sWiiUBenchSegs[WIIU_BENCH_MAX_SEGS];
+static u32 sWiiUBenchLeadCount = 0;
+static u32 sWiiUBenchSegCount = 0;
+
+static void PadMgr_WiiUBenchParse(void) {
+    const char* route = CVarGetString("gWiiU.BenchRoute", "");
+    if (route == NULL || route[0] == '\0') {
+        route = "|60:0:80,30:90:28,80:90:80,80:-90:80,60:180:80";
+    }
+    sWiiUBenchLeadCount = 0;
+    sWiiUBenchSegCount = 0;
+    bool lead = strchr(route, '|') != NULL;
+    const char* c = route;
+    while (*c != '\0' && sWiiUBenchSegCount < WIIU_BENCH_MAX_SEGS) {
+        if (*c == '|') {
+            lead = false;
+            c++;
+            continue;
+        }
+        char* end;
+        long frames = strtol(c, &end, 10);
+        if (end == c || *end != ':') {
+            break;
+        }
+        long deg = strtol(end + 1, &end, 10);
+        if (*end != ':') {
+            break;
+        }
+        long mag = strtol(end + 1, &end, 10);
+        WiiUBenchSeg* seg = &sWiiUBenchSegs[sWiiUBenchSegCount++];
+        seg->frames = (u16)(frames > 0 ? frames : 1);
+        seg->yaw = (s16)(deg * 0x10000 / 360);
+        seg->mag = (s8)(mag > 127 ? 127 : (mag < 0 ? 0 : mag));
+        if (lead) {
+            sWiiUBenchLeadCount++;
+        }
+        c = (*end == ',') ? end + 1 : end;
+    }
+    if (sWiiUBenchSegCount == sWiiUBenchLeadCount) { // no loop part: stand still after the lead
+        sWiiUBenchSegs[sWiiUBenchSegCount++] = (WiiUBenchSeg){ 20, 0, 0 };
+    }
+    LUSLOG_INFO("BENCHRUN route lead=%u loop=%u \"%s\"", (unsigned)sWiiUBenchLeadCount,
+                (unsigned)(sWiiUBenchSegCount - sWiiUBenchLeadCount), route);
+}
+
 static void PadMgr_WiiUBenchRun(Input* input) {
     static s32 sScene = -1;
     static u32 sFrame = 0;
@@ -237,6 +282,7 @@ static void PadMgr_WiiUBenchRun(Input* input) {
     if (gPlayState->sceneNum != sScene) {
         sScene = gPlayState->sceneNum;
         sFrame = 0;
+        PadMgr_WiiUBenchParse();
     }
     const u32 k = sFrame++;
     if (k < 40) {
@@ -244,26 +290,35 @@ static void PadMgr_WiiUBenchRun(Input* input) {
         return;
     }
     u32 t = k - 40;
+    u32 leadFrames = 0;
     u32 loopFrames = 0;
-    for (u32 i = 0; i < ARRAY_COUNT(sWiiUBenchRoute); i++) {
-        loopFrames += sWiiUBenchRoute[i].frames;
+    for (u32 i = 0; i < sWiiUBenchSegCount; i++) {
+        if (i < sWiiUBenchLeadCount) {
+            leadFrames += sWiiUBenchSegs[i].frames;
+        } else {
+            loopFrames += sWiiUBenchSegs[i].frames;
+        }
     }
-    t %= loopFrames;
     u32 seg = 0;
-    while (t >= sWiiUBenchRoute[seg].frames) {
-        t -= sWiiUBenchRoute[seg].frames;
+    if (t >= leadFrames) {
+        t = (t - leadFrames) % loopFrames;
+        seg = sWiiUBenchLeadCount;
+    }
+    while (t >= sWiiUBenchSegs[seg].frames) {
+        t -= sWiiUBenchSegs[seg].frames;
         seg++;
     }
     const s16 camYaw = Camera_GetInputDirYaw(GET_ACTIVE_CAM(gPlayState));
-    const s16 rel = (s16)(sYaw0 + sWiiUBenchRoute[seg].yaw - camYaw);
+    const s16 rel = (s16)(sYaw0 + sWiiUBenchSegs[seg].yaw - camYaw);
     // func_80077D10: stick angle = Math_Atan2S(relY, -relX), so relX = -M sin(a), relY = M cos(a).
-    input->cur.stick_x = (s8)(-sWiiUBenchRoute[seg].mag * Math_SinS(rel));
-    input->cur.stick_y = (s8)(sWiiUBenchRoute[seg].mag * Math_CosS(rel));
+    input->cur.stick_x = (s8)(-sWiiUBenchSegs[seg].mag * Math_SinS(rel));
+    input->cur.stick_y = (s8)(sWiiUBenchSegs[seg].mag * Math_CosS(rel));
     if ((k % 10) == 0) {
-        LUSLOG_INFO("BENCHRUN k=%u seg=%u pos=%.0f,%.0f,%.0f yaw=%#06x want=%#06x cam=%#06x speed=%.1f",
-                    k, seg, player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
-                    (u16)player->actor.shape.rot.y, (u16)(sYaw0 + sWiiUBenchRoute[seg].yaw), (u16)camYaw,
-                    player->linearVelocity);
+        LUSLOG_INFO("BENCHRUN k=%u seg=%u pos=%d,%d,%d room=%d yaw=%04x want=%04x speed10=%d", (unsigned)k,
+                    (unsigned)seg, (int)player->actor.world.pos.x, (int)player->actor.world.pos.y,
+                    (int)player->actor.world.pos.z, (int)gPlayState->roomCtx.curRoom.num,
+                    (unsigned)(u16)player->actor.shape.rot.y, (unsigned)(u16)(sYaw0 + sWiiUBenchSegs[seg].yaw),
+                    (int)(player->linearVelocity * 10.0f));
     }
 }
 #endif
