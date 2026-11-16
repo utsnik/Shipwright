@@ -77,6 +77,12 @@ void ThrowInvalidOTR();
 extern "C" uint32_t OSGetCoreId(void);
 extern "C" OSThread* OSGetCurrentThread(void);
 extern "C" int OSSetThreadAffinity(OSThread* thread, uint32_t affinity);
+extern "C" void OSSleepTicks(int64_t ticks);
+// Sleep without a condition variable (see WiiUPipelineWait). Not nanosleep: wut's nanosleep froze the console (DKR).
+static inline void WiiUSleepMicroseconds(uint32_t us) {
+    static const int64_t sTicksPerUs = (int64_t)(OSGetSystemInfo()->busClockSpeed / 4) / 1000000;
+    OSSleepTicks(sTicksPerUs * (int64_t)us);
+}
 #endif
 
 #include <functions.h>
@@ -1192,7 +1198,10 @@ void OTRAudio_Thread() {
 #ifdef __WIIU__
                 // Bounded like the pipeline handoff: a lost notify between cores (wut condvar, console
                 // 2026-11-16 13:28 freeze in __syscall_cond_wait) costs 2 ms instead of a permanent hang.
-                audio.cv_to_thread.wait_for(Lock, std::chrono::milliseconds(2));
+                // No timed condvar wait (see WiiUPipelineWait): poll the predicate every 0.5 ms.
+                Lock.unlock();
+                WiiUSleepMicroseconds(500);
+                Lock.lock();
 #else
                 audio.cv_to_thread.wait(Lock);
 #endif
@@ -2067,7 +2076,13 @@ std::condition_variable sWiiUPipelineChanged;
 // Bounded waits: a std::condition_variable handoff between cores lost wakeups on this platform (the audio
 // handoff, 2026-11-10). Re-checking the predicate every 2 ms turns a lost notify into a 2 ms delay, not a hang.
 template <typename Predicate> void WiiUPipelineWait(std::unique_lock<std::mutex>& lock, Predicate predicate) {
-    while (!sWiiUPipelineChanged.wait_for(lock, std::chrono::milliseconds(2), predicate)) {
+    // Never a timed condition wait on the Wii U: wut's wait_for keeps its OSAlarm on the waiter's stack; an alarm firing on another core as the wait returned ran
+    // OSWakeupThread on a dead stack frame - DSI inside the scheduler with its lock held, whole-console freeze
+    // (console 2026-11-16 22:28: SRR0 in coreinit, DAR 0x532, LR OSWakeupThread+0x30, system stack). Poll instead.
+    while (!predicate()) {
+        lock.unlock();
+        WiiUSleepMicroseconds(200);
+        lock.lock();
     }
 }
 WiiUPacketState sWiiUPacketStates[2] = { WiiUPacketState::Free, WiiUPacketState::Free };
@@ -2470,7 +2485,9 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
 #ifdef __WIIU__
-            audio.cv_from_thread.wait_for(Lock, std::chrono::milliseconds(2)); // see the audio thread's wait
+            Lock.unlock(); // no timed condvar wait on the Wii U (see WiiUPipelineWait)
+            WiiUSleepMicroseconds(200);
+            Lock.lock();
 #else
             audio.cv_from_thread.wait(Lock);
 #endif
