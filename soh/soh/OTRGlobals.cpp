@@ -1189,7 +1189,13 @@ void OTRAudio_Thread() {
         {
             std::unique_lock<std::mutex> Lock(audio.mutex);
             while (!audio.processing && audio.running) {
+#ifdef __WIIU__
+                // Bounded like the pipeline handoff: a lost notify between cores (wut condvar, console
+                // 2026-11-16 13:28 freeze in __syscall_cond_wait) costs 2 ms instead of a permanent hang.
+                audio.cv_to_thread.wait_for(Lock, std::chrono::milliseconds(2));
+#else
                 audio.cv_to_thread.wait(Lock);
+#endif
             }
 
             if (!audio.running) {
@@ -2320,6 +2326,11 @@ extern "C" void Graph_PipelineGameExited(void) {
 extern "C" bool Graph_PipelineIsGameExited(void) {
     return sWiiUGameExited;
 }
+
+extern "C" bool Graph_PipelineIsStopping(void) {
+    std::lock_guard<std::mutex> lock(sWiiUPipelineMutex);
+    return sWiiUPipelineStopping;
+}
 #else
 extern "C" void Graph_PipelineInit(void) {}
 extern "C" bool Graph_PipelineEnabled(void) { return false; }
@@ -2334,6 +2345,7 @@ extern "C" void wiiu_pipeline_wait_for_resources(void) {}
 extern "C" void Graph_PipelineRequestStop(void) {}
 extern "C" void Graph_PipelineGameExited(void) {}
 extern "C" bool Graph_PipelineIsGameExited(void) { return false; }
+extern "C" bool Graph_PipelineIsStopping(void) { return false; }
 #endif
 
 bool RunCommands(Gfx* Commands, const std::vector<std::unordered_map<Mtx*, MtxF>>& mtx_replacements,
@@ -2457,7 +2469,11 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 #endif
         std::unique_lock<std::mutex> Lock(audio.mutex);
         while (audio.processing) {
+#ifdef __WIIU__
+            audio.cv_from_thread.wait_for(Lock, std::chrono::milliseconds(2)); // see the audio thread's wait
+#else
             audio.cv_from_thread.wait(Lock);
+#endif
         }
 #ifdef __WIIU__
         gfx_wiiu_perf_audio_wait_us.fetch_add(static_cast<uint64_t>(

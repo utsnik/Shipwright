@@ -171,6 +171,7 @@ void Graph_PipelineWaitForResources(void);
 void Graph_PipelineRequestStop(void);
 void Graph_PipelineGameExited(void);
 bool Graph_PipelineIsGameExited(void);
+bool Graph_PipelineIsStopping(void);
 void Graph_PipelineDestroyGraph(void);
 void Graph_ProcessFrame(void (*run_one_game_iter)(void));
 void OTRLogString(const char* src);

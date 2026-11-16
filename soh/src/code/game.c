@@ -258,13 +258,17 @@ void GameState_ReqPadData(GameState* gameState) {
 // Framebuffer for the Link preview on the pause menu equipment sub-screen
 int gPauseLinkFrameBuffer = -1;
 
-void GameState_Update(GameState* gameState) {
-    GraphicsContext* gfxCtx = gameState->gfxCtx;
-
+void GameState_CreatePauseLinkFrameBuffer(void) {
     if (gPauseLinkFrameBuffer == -1) {
         gPauseLinkFrameBuffer = gfx_create_framebuffer(PAUSE_EQUIP_PLAYER_WIDTH, PAUSE_EQUIP_PLAYER_HEIGHT,
                                                        PAUSE_EQUIP_PLAYER_WIDTH, PAUSE_EQUIP_PLAYER_HEIGHT, true);
     }
+}
+
+void GameState_Update(GameState* gameState) {
+    GraphicsContext* gfxCtx = gameState->gfxCtx;
+
+    GameState_CreatePauseLinkFrameBuffer();
 
     GameState_SetFrameBuffer(gfxCtx);
 

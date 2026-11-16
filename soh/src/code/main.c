@@ -156,6 +156,16 @@ void Main(void* arg) {
     Graph_PipelineInit();
     if (Graph_PipelineEnabled()) {
         bool pipelineThreadStarted = false;
+        // Creating a framebuffer issues GX2 commands (StartDrawToFramebuffer + ClearFramebuffer). GX2 belongs to
+        // this thread's core: from the core-2 game thread they corrupted the command stream ("CP invalid PM4
+        // type 3 opcode" + GX2 hang reset at every pipeline boot, console 2026-11-16). Create them all here first;
+        // the game thread's own create calls then see valid ids and do nothing.
+        {
+            extern void FB_CreateFramebuffers(void);
+            extern void GameState_CreatePauseLinkFrameBuffer(void);
+            FB_CreateFramebuffers();
+            GameState_CreatePauseLinkFrameBuffer();
+        }
 #ifdef __WIIU__
         // Native Cafe thread on core 2 (libultraship WiiUImpl.cpp); the main thread keeps GX2/GUI.
         if (!wiiu_start_game_tick_thread(PipelineGameThreadEntry)) {

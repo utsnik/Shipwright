@@ -528,6 +528,19 @@ static void RunFrame() {
 }
 
 void Graph_ThreadEntry(void* arg0) {
+    if (Graph_PipelineEnabled()) {
+        // This is the core-2 game thread. ProcUI must be pumped by ONE thread only: WindowIsRunning() ->
+        // WHBProcIsRunning() here as well as in main.c's loop froze the whole console at exit (game thread inside
+        // ProcUIProcessMessages, console 2026-11-16 20:34). The main thread pumps ProcUI and requests the stop.
+        while (!Graph_PipelineIsStopping()) {
+            RunFrame();
+            if (Graph_PipelineIsGameExited()) {
+                return;
+            }
+        }
+        Graph_PipelineGameExited();
+        return;
+    }
     while (WindowIsRunning()) {
         RunFrame();
         if (Graph_PipelineEnabled() && Graph_PipelineIsGameExited()) {
